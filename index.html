@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medicare — Medicine Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #2b6cb0;
+      color: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.5px; }
+    header span { font-size: 1.6rem; }
+
+    main {
+      max-width: 900px;
+      margin: 36px auto;
+      padding: 0 16px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      padding: 28px;
+      margin-bottom: 28px;
+    }
+
+    .card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #2b6cb0;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #ebf4ff;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .form-grid .full { grid-column: 1 / -1; }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #4a5568;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid #cbd5e0;
+      border-radius: 7px;
+      font-size: 0.95rem;
+      color: #1a202c;
+      background: #f7fafc;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #2b6cb0;
+      background: #fff;
+    }
+    textarea { resize: vertical; min-height: 72px; }
+
+    .btn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary { background: #e2e8f0; color: #2d3748; }
+    .btn-secondary:hover { background: #cbd5e0; }
+    .btn-danger { background: #fc8181; color: #fff; }
+    .btn-danger:hover { background: #f56565; }
+    .btn-edit { background: #f6e05e; color: #744210; }
+    .btn-edit:hover { background: #ecc94b; }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    /* Medicine list */
+    .list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .badge {
+      background: #ebf4ff;
+      color: #2b6cb0;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 0;
+      color: #a0aec0;
+      font-size: 0.95rem;
+    }
+    .empty-state span { display: block; font-size: 2.5rem; margin-bottom: 8px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    thead tr { background: #ebf4ff; }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #4a5568;
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f0f4f8;
+      vertical-align: top;
+    }
+    tbody tr:hover { background: #f7fafc; }
+    tbody tr:last-child td { border-bottom: none; }
+
+    .med-name { font-weight: 600; color: #2d3748; }
+    .med-notes { color: #718096; font-size: 0.82rem; }
+    .actions { display: flex; gap: 8px; white-space: nowrap; }
+    .actions .btn { padding: 6px 14px; font-size: 0.8rem; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: #fff;
+      border-radius: 14px;
+      padding: 32px;
+      width: 100%;
+      max-width: 540px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(-20px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .modal h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #2b6cb0;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #ebf4ff;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #2f855a;
+      color: #fff;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+      z-index: 200;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .form-grid .full { grid-column: 1; }
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+      td { padding: 6px 10px; border: none; }
+      td::before {
+        content: attr(data-label) ": ";
+        font-weight: 700;
+        font-size: 0.78rem;
+        color: #718096;
+        text-transform: uppercase;
+      }
+      tbody tr {
+        background: #f7fafc;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>💊</span>
+  <h1>Medicare — Medicine Manager</h1>
+</header>
+
+<main>
+  <!-- Add Medicine Form -->
+  <div class="card">
+    <h2>Add New Medicine</h2>
+    <form id="addForm" novalidate>
+      <div class="form-grid">
+        <div>
+          <label for="name">Medicine Name *</label>
+          <input type="text" id="name" placeholder="e.g. Amoxicillin" required />
+        </div>
+        <div>
+          <label for="dosage">Dosage *</label>
+          <input type="text" id="dosage" placeholder="e.g. 500 mg" required />
+        </div>
+        <div>
+          <label for="frequency">Frequency *</label>
+          <select id="frequency" required>
+            <option value="">— Select —</option>
+            <option>Once daily</option>
+            <option>Twice daily</option>
+            <option>Three times daily</option>
+            <option>Four times daily</option>
+            <option>Every 4 hours</option>
+            <option>Every 6 hours</option>
+            <option>Every 8 hours</option>
+            <option>As needed</option>
+            <option>Weekly</option>
+          </select>
+        </div>
+        <div>
+          <label for="startDate">Start Date *</label>
+          <input type="date" id="startDate" required />
+        </div>
+        <div class="full">
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes" placeholder="e.g. Take with food, avoid alcohol…"></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">+ Add Medicine</button>
+        <button type="button" class="btn btn-secondary" onclick="clearAddForm()">Clear</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Medicine List -->
+  <div class="card">
+    <div class="list-header">
+      <h2 style="margin:0; padding:0; border:none;">My Medicines</h2>
+      <span class="badge" id="countBadge">0 medicines</span>
+    </div>
+    <div id="medicineList"></div>
+  </div>
+</main>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+  <div class="modal">
+    <h2 id="editModalTitle">✏️ Edit Medicine</h2>
+    <form id="editForm" novalidate>
+      <input type="hidden" id="editId" />
+      <div class="form-grid">
+        <div>
+          <label for="editName">Medicine Name *</label>
+          <input type="text" id="editName" required />
+        </div>
+        <div>
+          <label for="editDosage">Dosage *</label>
+          <input type="text" id="editDosage" required />
+        </div>
+        <div>
+          <label for="editFrequency">Frequency *</label>
+          <select id="editFrequency" required>
+            <option value="">— Select —</option>
+            <option>Once daily</option>
+            <option>Twice daily</option>
+            <option>Three times daily</option>
+            <option>Four times daily</option>
+            <option>Every 4 hours</option>
+            <option>Every 6 hours</option>
+            <option>Every 8 hours</option>
+            <option>As needed</option>
+            <option>Weekly</option>
+          </select>
+        </div>
+        <div>
+          <label for="editStartDate">Start Date *</label>
+          <input type="date" id="editStartDate" required />
+        </div>
+        <div class="full">
+          <label for="editNotes">Notes (optional)</label>
+          <textarea id="editNotes"></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const STORAGE_KEY = 'medicare_medicines';
+
+  function loadMedicines() {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  }
+
+  function saveMedicines(list) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function showToast(msg, color = '#2f855a') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.background = color;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  function renderList() {
+    const medicines = loadMedicines();
+    const container = document.getElementById('medicineList');
+    const badge = document.getElementById('countBadge');
+    badge.textContent = `${medicines.length} medicine${medicines.length !== 1 ? 's' : ''}`;
+
+    if (medicines.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <span>💊</span>
+          No medicines added yet. Use the form above to get started.
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Dosage</th>
+            <th>Frequency</th>
+            <th>Start Date</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${medicines.map(m => `
+            <tr>
+              <td data-label="Name"><span class="med-name">${escHtml(m.name)}</span></td>
+              <td data-label="Dosage">${escHtml(m.dosage)}</td>
+              <td data-label="Frequency">${escHtml(m.frequency)}</td>
+              <td data-label="Start Date">${formatDate(m.startDate)}</td>
+              <td data-label="Notes"><span class="med-notes">${escHtml(m.notes || '—')}</span></td>
+              <td data-label="Actions">
+                <div class="actions">
+                  <button class="btn btn-edit" onclick="openEditModal('${m.id}')">Edit</button>
+                  <button class="btn btn-danger" onclick="deleteMedicine('${m.id}')">Delete</button>
+                </div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  // Add form
+  document.getElementById('addForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const name      = document.getElementById('name').value.trim();
+    const dosage    = document.getElementById('dosage').value.trim();
+    const frequency = document.getElementById('frequency').value;
+    const startDate = document.getElementById('startDate').value;
+    const notes     = document.getElementById('notes').value.trim();
+
+    if (!name || !dosage || !frequency || !startDate) {
+      showToast('Please fill in all required fields.', '#c53030');
+      return;
+    }
+
+    const medicines = loadMedicines();
+    medicines.push({ id: generateId(), name, dosage, frequency, startDate, notes });
+    saveMedicines(medicines);
+    this.reset();
+    renderList();
+    showToast('Medicine added successfully!');
+  });
+
+  function clearAddForm() {
+    document.getElementById('addForm').reset();
+  }
+
+  // Delete
+  function deleteMedicine(id) {
+    if (!confirm('Delete this medicine?')) return;
+    const medicines = loadMedicines().filter(m => m.id !== id);
+    saveMedicines(medicines);
+    renderList();
+    showToast('Medicine deleted.', '#744210');
+  }
+
+  // Edit — open modal and populate fields
+  function openEditModal(id) {
+    const medicine = loadMedicines().find(m => m.id === id);
+    if (!medicine) return;
+
+    document.getElementById('editId').value        = medicine.id;
+    document.getElementById('editName').value      = medicine.name;
+    document.getElementById('editDosage').value    = medicine.dosage;
+    document.getElementById('editFrequency').value = medicine.frequency;
+    document.getElementById('editStartDate').value = medicine.startDate;
+    document.getElementById('editNotes').value     = medicine.notes || '';
+
+    document.getElementById('editModal').classList.add('open');
+    document.getElementById('editName').focus();
+  }
+
+  function closeEditModal() {
+    document.getElementById('editModal').classList.remove('open');
+  }
+
+  // Close modal on overlay click
+  document.getElementById('editModal').addEventListener('click', function (e) {
+    if (e.target === this) closeEditModal();
+  });
+
+  // Close modal on Escape key
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeEditModal();
+  });
+
+  // Edit form submit — save updated medicine
+  document.getElementById('editForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const id        = document.getElementById('editId').value;
+    const name      = document.getElementById('editName').value.trim();
+    const dosage    = document.getElementById('editDosage').value.trim();
+    const frequency = document.getElementById('editFrequency').value;
+    const startDate = document.getElementById('editStartDate').value;
+    const notes     = document.getElementById('editNotes').value.trim();
+
+    if (!name || !dosage || !frequency || !startDate) {
+      showToast('Please fill in all required fields.', '#c53030');
+      return;
+    }
+
+    const medicines = loadMedicines().map(m =>
+      m.id === id ? { id, name, dosage, frequency, startDate, notes } : m
+    );
+    saveMedicines(medicines);
+    closeEditModal();
+    renderList();
+    showToast('Medicine updated successfully!');
+  });
+
+  // Initial render
+  renderList();
+</script>
+</body>
+</html>
