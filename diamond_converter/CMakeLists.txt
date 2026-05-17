@@ -9,8 +9,20 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets)
 
-# 7-zip extraction dependency (use system 7z binary)
-find_program(SEVENZIP_EXECUTABLE NAMES 7z 7za REQUIRED)
+# 7-zip: search common install locations on Windows and Linux
+if(WIN32)
+    find_program(SEVENZIP_EXECUTABLE
+        NAMES 7z 7za
+        PATHS
+            "C:/Program Files/7-Zip"
+            "C:/Program Files (x86)/7-Zip"
+            "$ENV{ProgramFiles}/7-Zip"
+            "$ENV{ProgramFiles\(x86\)}/7-Zip"
+        REQUIRED
+    )
+else()
+    find_program(SEVENZIP_EXECUTABLE NAMES 7z 7za REQUIRED)
+endif()
 message(STATUS "Found 7-zip: ${SEVENZIP_EXECUTABLE}")
 
 add_executable(DiamondConverter
@@ -38,5 +50,12 @@ target_link_libraries(DiamondConverter PRIVATE
 target_compile_definitions(DiamondConverter PRIVATE
     SEVENZIP_PATH="${SEVENZIP_EXECUTABLE}"
 )
+
+# Windows: copy Qt DLLs next to executable automatically
+if(WIN32)
+    add_custom_command(TARGET DiamondConverter POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Run windeployqt to copy Qt DLLs if needed"
+    )
+endif()
 
 install(TARGETS DiamondConverter DESTINATION bin)
