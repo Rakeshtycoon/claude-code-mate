@@ -134,10 +134,16 @@ not be pinned down.
 
 Still `[OPEN]`:
 - Exact separator framing (would remove the residual mesh artefacts).
-- Isolating the individual **inclusion** sub-meshes (the green objects in
-  the planner) from the rough-stone mesh — the body block is a multi-
-  object scene and at least one object class uses a different vertex
-  record layout.
+- **Inclusion geometry** `[STRONG]`: after the rough-stone mesh the body
+  block carries a long series of **count-prefixed point records**
+  (`[u32 count][count × 3×f64]`) — ~582 records / ~528k points spanning
+  ~18 MB in the 564-A sample (a heavily-included stone; lightly-included
+  stones have far fewer). These hold the inclusion geometry the planner
+  draws green, but they are interleaved with the rough-stone outline and
+  measurement gizmos in one serialized object graph. Cleanly isolating
+  the individual inclusion solids needs the per-object framing decoded —
+  the records carry no self-describing type tag that has been identified
+  yet.
 
 `adv-analyzer geometry` reports/exports vertex clouds and the surface
 mesh; `adv-analyzer discover` continues probing the raster regions.
