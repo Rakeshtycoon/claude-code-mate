@@ -166,6 +166,15 @@ bool OX2ZParser::parseOX2(const std::string& ox2Path, DiamondModel& model, Progr
     if (progress) progress(85, "Processed " + std::to_string(processedXRay) +
                            " X-ray slices, " + std::to_string(processedSol) + " solution records");
 
+    // After the entry loop, reconstruct 3D geometry from CT07 contours if no polished stone found
+    {
+        bool hasGeometry = false;
+        for (const auto& s : model.solutions)
+            if (!s.vertices.empty()) { hasGeometry = true; break; }
+        if (!hasGeometry)
+            parseCT07Contours(data, entries, model, progress);
+    }
+
     // Collect unique clarity grades
     std::set<std::string> grades;
     for (const auto& xr : model.xraySlices)
@@ -527,4 +536,192 @@ std::string OX2ZParser::extractString(const std::vector<uint8_t>& data, uint32_t
 
 bool OX2ZParser::guidEquals(const uint8_t* a, const uint8_t* b) {
     return memcmp(a, b, 16) == 0;
+}
+
+// ---------------------------------------------------------------------------
+// CT07 contour-based 3D reconstruction
+// ---------------------------------------------------------------------------
+
+void OX2ZParser::parseCT07Contours(const std::vector<uint8_t>& data,
+                                    const std::vector<DirEntry>& entries,
+                                    DiamondModel& model,
+                                    ProgressCallback& progress) {
+    // Find the first CT07 entry (phi=0 degrees, index 0)
+    const DirEntry* firstCT07 = nullptr;
+    for (const auto& e : entries) {
+        if (guidEquals(e.guid, GUID_CT07_CONTOUR)) {
+            firstCT07 = &e;
+            break;
+        }
+    }
+    if (!firstCT07) return;
+
+    if (progress) progress(88, "Decoding CT07 contour at phi=0...");
+
+    // Decode the nibble path to get pixel coordinates
+    std::vector<Vec3> pixelPoints = decodeCT07NibblePath(data, firstCT07->offset, firstCT07->size);
+    if (pixelPoints.size() < 10) return;
+
+    // Compute bounding box in pixel space
+    float minX = pixelPoints[0].x, maxX = pixelPoints[0].x;
+    float minY = pixelPoints[0].y, maxY = pixelPoints[0].y;
+    for (const auto& p : pixelPoints) {
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+    }
+
+    float xSpan = maxX - minX;
+    float ySpan = maxY - minY;
+    if (xSpan < 1.0f || ySpan < 1.0f) return;
+
+    // Determine diamond dimensions from model name or use defaults
+    // W=6.381mm across x, D=6.468mm along y (depth = z axis in 3D)
+    // If model metadata contains dimensions we would use them, but we use validated defaults
+    // that match the known scale for the reference diamond.
+    // The contour x-span maps to width W and y-span maps to depth D.
+    // We read actual mm/px scale from the span ratios derived from typical round brilliants:
+    //   aspect ratio W:D is approximately 1:1 (round stones), so use 1:1 and normalize.
+    // Since we don't have ground truth mm here, we normalise so that x half-width = 1.0
+    // and z height is proportional (ySpan/xSpan ratio preserved).
+    // Downstream code or the UI can scale if needed.
+    float cx = (minX + maxX) * 0.5f;
+    float cz = (minY + maxY) * 0.5f;
+
+    // scale_x: normalise so half-width = 1 unit (radius 1.0)
+    float scaleX = 1.0f / (xSpan * 0.5f);
+    // scale_z: preserve aspect ratio relative to x
+    float scaleZ = scaleX;  // square pixels assumed; ySpan may differ in real data
+
+    // Convert pixel points to mm-like coordinates centred at origin
+    std::vector<Vec3> mmPoints;
+    mmPoints.reserve(pixelPoints.size());
+    for (const auto& p : pixelPoints) {
+        Vec3 mm;
+        mm.x = (p.x - cx) * scaleX;
+        mm.z = (p.y - cz) * scaleZ;
+        mm.y = 0.0f;
+        mmPoints.push_back(mm);
+    }
+
+    // Extract right-half profile (x >= 0): represents r(z) profile
+    std::vector<Vec3> profile;
+    for (const auto& p : mmPoints) {
+        if (p.x >= 0.0f) {
+            profile.push_back(p);
+        }
+    }
+    if (profile.size() < 3) return;
+
+    // Sort profile by z (height) ascending
+    std::sort(profile.begin(), profile.end(), [](const Vec3& a, const Vec3& b) {
+        return a.z < b.z;
+    });
+
+    if (progress) progress(92, "Building 3D mesh from contour profile...");
+
+    DiamondSolution sol;
+    sol.name = "CT Scan Reconstruction";
+    buildMeshFromProfile(profile, sol, 72);
+
+    if (!sol.vertices.empty()) {
+        model.solutions.push_back(std::move(sol));
+        if (progress) progress(97, "CT Scan mesh generated");
+    }
+}
+
+std::vector<Vec3> OX2ZParser::decodeCT07NibblePath(const std::vector<uint8_t>& data,
+                                                     uint32_t offset, uint32_t size) {
+    std::vector<Vec3> points;
+    if (size < static_cast<uint32_t>(CT07_DATA_START + 4)) return points;
+
+    // Read starting pixel coordinates (int16 little-endian)
+    int16_t startX = static_cast<int16_t>(readLE<uint16_t>(data, offset + CT07_START_X_OFF));
+    int16_t startY = static_cast<int16_t>(readLE<uint16_t>(data, offset + CT07_START_Y_OFF));
+
+    float cx = static_cast<float>(startX);
+    float cy = static_cast<float>(startY);
+    points.push_back({cx, cy, 0.0f});
+
+    // Decode nibble-encoded direction deltas starting at CT07_DATA_START
+    uint32_t dataBegin = offset + CT07_DATA_START;
+    uint32_t dataEnd   = offset + size;
+
+    int zeroRun = 0;
+    for (uint32_t pos = dataBegin; pos < dataEnd; ++pos) {
+        uint8_t byte = data[pos];
+        if (byte == 0) {
+            ++zeroRun;
+            if (zeroRun >= 3) break;  // terminator: 3+ consecutive zero bytes
+            continue;
+        }
+        zeroRun = 0;
+
+        // High nibble -> dx, low nibble -> dy
+        int dx = static_cast<int>((byte >> 4) & 0x0F) - 4;
+        int dy = static_cast<int>(byte & 0x0F) - 4;
+
+        cx += static_cast<float>(dx);
+        cy += static_cast<float>(dy);
+        points.push_back({cx, cy, 0.0f});
+    }
+
+    return points;
+}
+
+void OX2ZParser::buildMeshFromProfile(const std::vector<Vec3>& profile2D,
+                                       DiamondSolution& sol, int nSlices) {
+    // profile2D: list of Vec3 where x=radius, z=height, y=0
+    // We rotate around Z axis to create the 3D surface of revolution.
+    if (profile2D.size() < 2 || nSlices < 3) return;
+
+    const float PI = 3.14159265358979323846f;
+    const float EPS = 1e-5f;
+
+    int nProfile = static_cast<int>(profile2D.size());
+
+    // Generate all vertices: profile_pt x slice_angle
+    // Vertex index: slice * nProfile + profileIdx
+    sol.vertices.reserve(nProfile * nSlices);
+    for (int s = 0; s < nSlices; ++s) {
+        float theta = (2.0f * PI * s) / nSlices;
+        float cosT  = std::cos(theta);
+        float sinT  = std::sin(theta);
+        for (int p = 0; p < nProfile; ++p) {
+            float r = profile2D[p].x;
+            float z = profile2D[p].z;
+            sol.vertices.push_back({r * cosT, r * sinT, z});
+        }
+    }
+
+    // Create quad faces between adjacent slices, split each quad into 2 triangles
+    sol.faces.reserve(nSlices * (nProfile - 1) * 2);
+    for (int s = 0; s < nSlices; ++s) {
+        int sNext = (s + 1) % nSlices;
+        for (int p = 0; p < nProfile - 1; ++p) {
+            uint32_t v00 = s     * nProfile + p;
+            uint32_t v01 = s     * nProfile + p + 1;
+            uint32_t v10 = sNext * nProfile + p;
+            uint32_t v11 = sNext * nProfile + p + 1;
+
+            float r0 = profile2D[p].x;
+            float r1 = profile2D[p + 1].x;
+
+            // Skip degenerate quads where both rows have near-zero radius (tip pinched)
+            if (r0 < EPS && r1 < EPS) continue;
+
+            if (r0 < EPS) {
+                // Top tip: emit single triangle (fan from tip)
+                sol.faces.push_back({v00, v10, v11});
+            } else if (r1 < EPS) {
+                // Bottom tip: emit single triangle (fan to tip)
+                sol.faces.push_back({v00, v10, v01});
+            } else {
+                // Normal quad: two triangles
+                sol.faces.push_back({v00, v10, v11});
+                sol.faces.push_back({v00, v11, v01});
+            }
+        }
+    }
 }

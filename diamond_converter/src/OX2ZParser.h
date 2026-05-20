@@ -46,6 +46,14 @@ private:
     void parseSolutionRecord(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size,
                              DiamondModel& model);
 
+    // CT07 contour reconstruction
+    void parseCT07Contours(const std::vector<uint8_t>& data, const std::vector<DirEntry>& entries,
+                           DiamondModel& model, ProgressCallback& progress);
+    std::vector<Vec3> decodeCT07NibblePath(const std::vector<uint8_t>& data, uint32_t offset,
+                                           uint32_t size);
+    void buildMeshFromProfile(const std::vector<Vec3>& profile2D, DiamondSolution& sol,
+                              int nSlices = 72);
+
     // Geometry helpers
     std::vector<Triangle> readFaceIndices(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size);
     std::vector<Vec3>     readVertices(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size);
@@ -89,4 +97,9 @@ private:
     static constexpr uint32_t ENTRY4_D2_FACE_OFFSET   = 122928; // 0x01e030
     static constexpr uint32_t ENTRY4_D2_FACE_SIZE     = 28864;  // 1804 * 16 bytes
     static constexpr float    COORD_VALID_MAX          = 25.0f;  // max coord in mm
+
+    // CT07 block layout constants (byte offsets relative to entry data start)
+    static constexpr int CT07_START_X_OFF = 83;   // int16 LE: start pixel x
+    static constexpr int CT07_START_Y_OFF = 85;   // int16 LE: start pixel y
+    static constexpr int CT07_DATA_START  = 91;   // nibble-encoded direction deltas begin here
 };
