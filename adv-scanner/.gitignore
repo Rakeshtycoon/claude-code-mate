@@ -1,0 +1,22 @@
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tool output / generated data
+*.npy
+*.raw
+*.stl
+*.obj
+*.ply
+slices/
+thumbnails/
+out/
+
+# Proprietary sample data — never commit
+*.adv
