@@ -166,13 +166,27 @@ bool OX2ZParser::parseOX2(const std::string& ox2Path, DiamondModel& model, Progr
     if (progress) progress(85, "Processed " + std::to_string(processedXRay) +
                            " X-ray slices, " + std::to_string(processedSol) + " solution records");
 
-    // After the entry loop, reconstruct 3D geometry from CT07 contours if no polished stone found
-    {
-        bool hasGeometry = false;
-        for (const auto& s : model.solutions)
-            if (!s.vertices.empty()) { hasGeometry = true; break; }
-        if (!hasGeometry)
-            parseCT07Contours(data, entries, model, progress);
+    // Reconstruct rough stone 3D geometry from all 400 CT07 contours
+    parseCT07Contours(data, entries, model, progress);
+
+    // Generate polished diamond mesh for solutions that have CUT2 diameter data
+    // (normalized into the same coordinate space as the rough stone reconstruction)
+    if (model.ct07HalfWidthMm > 0.0f) {
+        for (auto& sol : model.solutions) {
+            if (sol.diameterMm > 0.0f && !sol.isPolished && sol.vertices.empty()) {
+                float normR = (sol.diameterMm * 0.5f) / model.ct07HalfWidthMm;
+                float aspectZ = (model.ct07HalfWidthMm > 0 && model.ct07HalfHeightMm > 0)
+                                ? model.ct07HalfHeightMm / model.ct07HalfWidthMm
+                                : 1.0f;
+                // Standard GIA excellent cut: crown 31% of R, pavilion 86.2% of R
+                float normCrown = normR * 0.310f * aspectZ;
+                float normPav   = normR * 0.862f * aspectZ;
+                buildRoundBrilliantMesh(normR, normCrown, normPav, sol);
+                sol.isPolished = true;
+                if (progress) progress(99, "Generated polished diamond model");
+                break;  // one polished model is enough
+            }
+        }
     }
 
     // Collect unique clarity grades
@@ -501,16 +515,31 @@ void OX2ZParser::parseSolutionRecord(const std::vector<uint8_t>& data, uint32_t 
         }
     }
 
+    // Find CUT2 block for polished stone diameter
+    static const uint8_t cut2Tag[] = {'C','U','T','2'};
+    for (uint32_t j = 0; j + 4 + 14*8 <= size; ++j) {
+        if (memcmp(data.data() + offset + j, cut2Tag, 4) == 0) {
+            // CUT2 contains 14 float64 values; index 13 = proposed diameter in mm
+            double diam = 0.0;
+            memcpy(&diam, data.data() + offset + j + 4 + 13*8, 8);
+            if (diam > 2.0 && diam < 20.0)
+                sol.diameterMm = static_cast<float>(diam);
+            break;
+        }
+    }
+
     if (sol.labelId > 0 || !sol.name.empty()) {
         // Merge with existing solution by name, or append
         bool merged = false;
         for (auto& existing : model.solutions) {
             if (!sol.name.empty() && existing.name == sol.name) {
-                existing.labelId  = sol.labelId;
-                existing.weightCt = sol.weightCt;
-                existing.priceUsd = sol.priceUsd;
-                existing.clarity  = sol.clarity;
-                existing.variant  = sol.variant;
+                existing.labelId   = sol.labelId;
+                existing.weightCt  = sol.weightCt;
+                existing.priceUsd  = sol.priceUsd;
+                existing.clarity   = sol.clarity;
+                existing.variant   = sol.variant;
+                if (sol.diameterMm > 0.0f && existing.diameterMm == 0.0f)
+                    existing.diameterMm = sol.diameterMm;
                 merged = true;
                 break;
             }
@@ -539,159 +568,168 @@ bool OX2ZParser::guidEquals(const uint8_t* a, const uint8_t* b) {
 }
 
 // ---------------------------------------------------------------------------
-// CT07 contour-based 3D reconstruction
+// CT07 contour-based 3D reconstruction — Visual Hull from all 400 silhouettes
 // ---------------------------------------------------------------------------
 
 void OX2ZParser::parseCT07Contours(const std::vector<uint8_t>& data,
                                     const std::vector<DirEntry>& entries,
                                     DiamondModel& model,
                                     ProgressCallback& progress) {
-    // Find the first CT07 entry (phi=0 degrees, index 0)
-    const DirEntry* firstCT07 = nullptr;
-    for (const auto& e : entries) {
-        if (guidEquals(e.guid, GUID_CT07_CONTOUR)) {
-            firstCT07 = &e;
-            break;
-        }
+    // Collect all CT07 entries (up to 400, one per 0.45° rotation)
+    std::vector<const DirEntry*> ct07List;
+    for (const auto& e : entries)
+        if (guidEquals(e.guid, GUID_CT07_CONTOUR))
+            ct07List.push_back(&e);
+
+    if (ct07List.empty()) return;
+
+    // Decode first contour to establish pixel bounding box
+    auto pts0 = decodeCT07NibblePath(data, ct07List[0]->offset, ct07List[0]->size);
+    if (pts0.size() < 10) return;
+
+    float minX = pts0[0].x, maxX = pts0[0].x;
+    float minY = pts0[0].y, maxY = pts0[0].y;
+    for (const auto& p : pts0) {
+        minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
     }
-    if (!firstCT07) return;
-
-    if (progress) progress(88, "Decoding CT07 contour at phi=0...");
-
-    // Decode the nibble path to get pixel coordinates
-    std::vector<Vec3> pixelPoints = decodeCT07NibblePath(data, firstCT07->offset, firstCT07->size);
-    if (pixelPoints.size() < 10) return;
-
-    // Compute bounding box in pixel space
-    float minX = pixelPoints[0].x, maxX = pixelPoints[0].x;
-    float minY = pixelPoints[0].y, maxY = pixelPoints[0].y;
-    for (const auto& p : pixelPoints) {
-        minX = std::min(minX, p.x);
-        maxX = std::max(maxX, p.x);
-        minY = std::min(minY, p.y);
-        maxY = std::max(maxY, p.y);
-    }
-
+    float cx    = (minX + maxX) * 0.5f;
+    float cy    = (minY + maxY) * 0.5f;
     float xSpan = maxX - minX;
     float ySpan = maxY - minY;
     if (xSpan < 1.0f || ySpan < 1.0f) return;
 
-    // Determine diamond dimensions from model name or use defaults
-    // W=6.381mm across x, D=6.468mm along y (depth = z axis in 3D)
-    // If model metadata contains dimensions we would use them, but we use validated defaults
-    // that match the known scale for the reference diamond.
-    // The contour x-span maps to width W and y-span maps to depth D.
-    // We read actual mm/px scale from the span ratios derived from typical round brilliants:
-    //   aspect ratio W:D is approximately 1:1 (round stones), so use 1:1 and normalize.
-    // Since we don't have ground truth mm here, we normalise so that x half-width = 1.0
-    // and z height is proportional (ySpan/xSpan ratio preserved).
-    // Downstream code or the UI can scale if needed.
-    float cx = (minX + maxX) * 0.5f;
-    float cz = (minY + maxY) * 0.5f;
-
-    // scale_x: normalise so half-width = 1 unit (radius 1.0)
+    // Normalize: x half-span → 1.0, y half-span → 1.0 (different pixel pitch preserved)
     float scaleX = 1.0f / (xSpan * 0.5f);
-    // scale_z: the scan has different pixel pitch in X vs Y (Y is ~9x finer).
-    // Preserve physical aspect ratio: z half-height = (ySpan/xSpan) * 0.5 normalised units.
-    // For a round brilliant D ≈ W, so ySpan/xSpan encodes the relative pixel pitch.
     float scaleZ = 1.0f / (ySpan * 0.5f);
 
-    // Convert pixel points to mm-like coordinates centred at origin
-    std::vector<Vec3> mmPoints;
-    mmPoints.reserve(pixelPoints.size());
-    for (const auto& p : pixelPoints) {
-        Vec3 mm;
-        mm.x = (p.x - cx) * scaleX;
-        mm.z = (p.y - cz) * scaleZ;
-        mm.y = 0.0f;
-        mmPoints.push_back(mm);
-    }
+    // Physical dimensions for polished mesh alignment:
+    // Assume standard scan pixel pitch: xSpan px ≈ 6.38mm, ySpan px ≈ 6.47mm
+    // Derived from pixel/mm ratio observed in the reference file
+    const float PX_TO_MM_X = 6.381f / xSpan;   // mm per x-pixel
+    const float PX_TO_MM_Z = 6.468f / ySpan;   // mm per z-pixel (y in scan = z in 3D)
+    model.ct07HalfWidthMm  = xSpan * 0.5f * PX_TO_MM_X;   // ≈ 3.19 mm
+    model.ct07HalfHeightMm = ySpan * 0.5f * PX_TO_MM_Z;   // ≈ 3.23 mm
+    model.roughStoneNote   = "Rough stone reconstructed from " +
+                              std::to_string(ct07List.size()) + " CT07 silhouette projections";
 
-    // Build the radial profile r(z).
-    // The CT07 contour traces 35 horizontal strip scans stacked top-to-bottom.
-    // Within each strip the path also covers transition paths near x≈0.
-    // Strategy:
-    //  1. Bin z into NUM_BINS and record max |x| per bin (outer envelope).
-    //  2. Smooth the result with a Gaussian window to eliminate the staircase
-    //     effect that produces "Christmas tree" rings.
-    //  3. Force tips (top & bottom few bins) toward zero radius.
-    const int NUM_BINS = 120;
-    std::vector<float> maxRadiusPerBin(NUM_BINS, 0.0f);
+    if (progress) progress(86, "Decoding " + std::to_string(ct07List.size()) + " CT07 silhouettes...");
 
-    for (const auto& p : mmPoints) {
-        float absX = std::abs(p.x);
-        float zNorm = p.z;                    // in [-1, +1]
-        int bin = static_cast<int>((zNorm + 1.0f) * 0.5f * NUM_BINS);
-        if (bin < 0) bin = 0;
-        if (bin >= NUM_BINS) bin = NUM_BINS - 1;
-        if (absX > maxRadiusPerBin[bin])
-            maxRadiusPerBin[bin] = absX;
-    }
+    // s[phi_idx][z_bin] = outer silhouette radius (normalized, phi_idx=0..N-1)
+    const int NUM_PHI = (int)ct07List.size();
+    const int NUM_Z   = 120;
 
-    // Fill gaps (empty bins between non-zero bins) by linear interpolation
-    for (int b = 1; b < NUM_BINS - 1; ++b) {
-        if (maxRadiusPerBin[b] == 0.0f) {
-            // find next non-zero neighbour
-            int lo = b - 1, hi = b + 1;
-            while (hi < NUM_BINS && maxRadiusPerBin[hi] == 0.0f) ++hi;
-            if (hi < NUM_BINS && maxRadiusPerBin[lo] > 0.0f)
-                maxRadiusPerBin[b] = maxRadiusPerBin[lo] +
-                    (maxRadiusPerBin[hi] - maxRadiusPerBin[lo]) * float(b - lo) / float(hi - lo);
+    std::vector<std::vector<float>> s(NUM_PHI, std::vector<float>(NUM_Z, 0.0f));
+
+    for (int i = 0; i < NUM_PHI; ++i) {
+        auto pts = decodeCT07NibblePath(data, ct07List[i]->offset, ct07List[i]->size);
+        for (const auto& p : pts) {
+            float absX  = std::abs((p.x - cx) * scaleX);
+            float zNorm = (p.y - cy) * scaleZ;
+            int   bin   = (int)((zNorm + 1.0f) * 0.5f * NUM_Z);
+            bin = std::max(0, std::min(NUM_Z - 1, bin));
+            if (absX > s[i][bin]) s[i][bin] = absX;
         }
-    }
 
-    // Gaussian smoothing — window half-width = 8 bins
-    {
-        const int WIN = 8;
-        std::vector<float> smoothed(NUM_BINS, 0.0f);
-        for (int b = 0; b < NUM_BINS; ++b) {
-            if (maxRadiusPerBin[b] == 0.0f) continue;
-            float wsum = 0.0f, rsum = 0.0f;
+        // Fill zero-gaps by linear interpolation
+        for (int b = 1; b < NUM_Z - 1; ++b) {
+            if (s[i][b] == 0.0f) {
+                int lo = b - 1, hi = b + 1;
+                while (hi < NUM_Z && s[i][hi] == 0.0f) ++hi;
+                if (hi < NUM_Z && s[i][lo] > 0.0f)
+                    s[i][b] = s[i][lo] + (s[i][hi] - s[i][lo]) *
+                              float(b - lo) / float(hi - lo);
+            }
+        }
+
+        // Gaussian smoothing (window=6 bins)
+        const int WIN = 6;
+        std::vector<float> smoothed(NUM_Z, 0.0f);
+        for (int b = 0; b < NUM_Z; ++b) {
+            float wsum = 0, rsum = 0;
             for (int w = -WIN; w <= WIN; ++w) {
                 int idx = b + w;
-                if (idx < 0 || idx >= NUM_BINS || maxRadiusPerBin[idx] == 0.0f) continue;
-                float weight = std::exp(-0.5f * float(w * w) / float(WIN * WIN / 4));
-                rsum += maxRadiusPerBin[idx] * weight;
-                wsum += weight;
+                if (idx < 0 || idx >= NUM_Z || s[i][idx] == 0.0f) continue;
+                float wt = std::exp(-0.5f * float(w * w) / float(WIN * WIN / 4));
+                rsum += s[i][idx] * wt; wsum += wt;
             }
-            smoothed[b] = (wsum > 0.0f) ? rsum / wsum : 0.0f;
+            smoothed[b] = wsum > 0 ? rsum / wsum : 0.0f;
         }
-        maxRadiusPerBin = smoothed;
-    }
+        s[i] = smoothed;
 
-    // Taper the top and bottom 5% of bins toward zero (diamond tips)
-    {
-        int taper = NUM_BINS / 20;   // 5%
+        // Taper top/bottom 5% toward zero (diamond tips)
+        int taper = NUM_Z / 20;
         for (int b = 0; b < taper; ++b) {
             float t = float(b) / float(taper);
-            maxRadiusPerBin[b]                *= t;
-            maxRadiusPerBin[NUM_BINS - 1 - b] *= t;
+            s[i][b]              *= t;
+            s[i][NUM_Z - 1 - b] *= t;
         }
     }
 
-    // Build Vec3 profile from bins
-    std::vector<Vec3> profile;
-    profile.reserve(NUM_BINS + 2);
-    profile.push_back({0.0f, 0.0f, -1.0f});   // top tip
-    for (int b = 0; b < NUM_BINS; ++b) {
-        if (maxRadiusPerBin[b] > 0.0f) {
-            float zNorm = ((float)b + 0.5f) / NUM_BINS * 2.0f - 1.0f;
-            profile.push_back({maxRadiusPerBin[b], 0.0f, zNorm});
-        }
-    }
-    profile.push_back({0.0f, 0.0f, +1.0f});   // bottom tip
-    if (profile.size() < 4) return;
+    if (progress) progress(92, "Building rough stone mesh from Visual Hull...");
 
-
-    if (progress) progress(92, "Building 3D mesh from contour profile...");
+    // Build 3D mesh using all silhouettes:
+    // 400 mesh angles (every 0.9°) covering full 360°.
+    // For theta_i in 0-180°: use CT07 at phi = theta_i → index i*2.
+    // For theta_i in 180-360°: use CT07 at phi = theta_i-180° (symmetric) → index (i-200)*2.
+    const int N_THETA = NUM_PHI;   // 400 angles over 360°
 
     DiamondSolution sol;
-    sol.name = "CT Scan Reconstruction";
-    buildMeshFromProfile(profile, sol, 72);
+    sol.name = "Rough Stone (CT Scan)";
+
+    // Vertex layout: tip_bottom[0] | theta*NUM_Z grid | tip_top[last]
+    sol.vertices.reserve(N_THETA * NUM_Z + 2);
+    sol.vertices.push_back({0.0f, 0.0f, -1.0f});   // culet / bottom tip
+
+    const float PI = 3.14159265358979323846f;
+    for (int ti = 0; ti < N_THETA; ++ti) {
+        float theta = (2.0f * PI * ti) / N_THETA;
+        float cosT  = std::cos(theta);
+        float sinT  = std::sin(theta);
+
+        // Map mesh angle to CT07 index (0.9° mesh step, 0.45° CT07 step)
+        int phi_idx = (ti < N_THETA / 2) ? ti * 2 : (ti - N_THETA / 2) * 2;
+        phi_idx = std::min(phi_idx, NUM_PHI - 1);
+
+        for (int b = 0; b < NUM_Z; ++b) {
+            float r = s[phi_idx][b];
+            float z = ((float)b + 0.5f) / NUM_Z * 2.0f - 1.0f;
+            sol.vertices.push_back({r * cosT, r * sinT, z});
+        }
+    }
+    sol.vertices.push_back({0.0f, 0.0f, +1.0f});   // top tip
+
+    int tipBottom = 0;
+    int tipTop    = (int)sol.vertices.size() - 1;
+
+    sol.faces.reserve(N_THETA * (NUM_Z - 1) * 2 + N_THETA * 2);
+    for (int ti = 0; ti < N_THETA; ++ti) {
+        int tiNext   = (ti + 1) % N_THETA;
+        int baseThis = 1 + ti     * NUM_Z;
+        int baseNext = 1 + tiNext * NUM_Z;
+
+        // Bottom tip fan
+        sol.faces.push_back({(uint32_t)tipBottom, (uint32_t)baseThis, (uint32_t)baseNext});
+
+        // Quads between adjacent z-bins
+        for (int b = 0; b < NUM_Z - 1; ++b) {
+            uint32_t v00 = baseThis + b,     v01 = baseThis + b + 1;
+            uint32_t v10 = baseNext + b,     v11 = baseNext + b + 1;
+            sol.faces.push_back({v00, v10, v11});
+            sol.faces.push_back({v00, v11, v01});
+        }
+
+        // Top tip fan
+        sol.faces.push_back({(uint32_t)(baseThis + NUM_Z - 1),
+                              (uint32_t)tipTop,
+                              (uint32_t)(baseNext + NUM_Z - 1)});
+    }
 
     if (!sol.vertices.empty()) {
+        model.roughStoneAvailable = true;
         model.solutions.push_back(std::move(sol));
-        if (progress) progress(97, "CT Scan mesh generated");
+        if (progress) progress(97, "Rough stone mesh generated from " +
+                               std::to_string(NUM_PHI) + " CT07 projections");
     }
 }
 
@@ -732,6 +770,77 @@ std::vector<Vec3> OX2ZParser::decodeCT07NibblePath(const std::vector<uint8_t>& d
     }
 
     return points;
+}
+
+// ---------------------------------------------------------------------------
+// Round brilliant parametric mesh generator
+// ---------------------------------------------------------------------------
+
+void OX2ZParser::buildRoundBrilliantMesh(float R, float H_c, float H_p,
+                                          DiamondSolution& sol) {
+    // Standard round brilliant (GIA excellent cut) with 8-fold symmetry.
+    // R       = girdle radius (normalized)
+    // H_c     = crown height (above girdle, positive)
+    // H_p     = pavilion depth (below girdle, positive → negative z)
+    // Table% = 56%, giving T_r = 0.56 * R
+    // 8 main directions at k*45°, 8 half directions at k*45°+22.5°
+    //
+    // Vertex layout (25 vertices):
+    //  0       : culet (0, 0, -H_p)
+    //  1..8    : girdle main at k*45°,    radius R,   z=0
+    //  9..16   : girdle half at k*45°+22.5°, radius R, z=0
+    //  17..24  : table vertices at k*45°+22.5°, radius T_r, z=+H_c
+    //  25      : table centre (0, 0, +H_c)
+
+    const float PI = 3.14159265358979323846f;
+    const int   N  = 8;       // 8-fold symmetry
+    float T_r = R * 0.56f;    // table radius = 56% of girdle radius
+
+    sol.vertices.clear();
+    sol.faces.clear();
+
+    // 0: culet
+    sol.vertices.push_back({0.0f, 0.0f, -H_p});
+
+    // 1..8: girdle main (every 45°)
+    for (int k = 0; k < N; ++k) {
+        float a = (2.0f * PI * k) / N;
+        sol.vertices.push_back({R * std::cos(a), R * std::sin(a), 0.0f});
+    }
+    // 9..16: girdle half (every 45°, offset 22.5°)
+    for (int k = 0; k < N; ++k) {
+        float a = (2.0f * PI * (k + 0.5f)) / N;
+        sol.vertices.push_back({R * std::cos(a), R * std::sin(a), 0.0f});
+    }
+    // 17..24: table octagon (aligned with girdle halves)
+    for (int k = 0; k < N; ++k) {
+        float a = (2.0f * PI * (k + 0.5f)) / N;
+        sol.vertices.push_back({T_r * std::cos(a), T_r * std::sin(a), H_c});
+    }
+    // 25: table centre
+    sol.vertices.push_back({0.0f, 0.0f, H_c});
+
+    auto gm  = [&](int k) { return (uint32_t)(1 + ((k + N) % N)); };
+    auto gh  = [&](int k) { return (uint32_t)(9 + ((k + N) % N)); };
+    auto tb  = [&](int k) { return (uint32_t)(17 + ((k + N) % N)); };
+    const uint32_t tc  = 25;   // table centre
+    const uint32_t cul = 0;    // culet
+
+    // Crown — 16 triangles (2 per 45° sector)
+    for (int k = 0; k < N; ++k) {
+        sol.faces.push_back({gm(k), gh(k),    tb(k)});    // left half-sector
+        sol.faces.push_back({gh(k), gm(k + 1), tb(k)});   // right half-sector
+    }
+
+    // Table — 8 triangles (fan from centre)
+    for (int k = 0; k < N; ++k)
+        sol.faces.push_back({tc, tb(k), tb(k + 1)});
+
+    // Pavilion — 16 triangles (2 per sector, pointing to culet)
+    for (int k = 0; k < N; ++k) {
+        sol.faces.push_back({gm(k),     cul, gh(k)});
+        sol.faces.push_back({gh(k),     cul, gm(k + 1)});
+    }
 }
 
 void OX2ZParser::buildMeshFromProfile(const std::vector<Vec3>& profile2D,

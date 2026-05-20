@@ -31,6 +31,10 @@ struct DiamondSolution {
     float       priceUsd  = 0.0f; // Price in USD (e.g. 511.50)
     std::string clarity;          // Clarity grade ("I1", "VVS1", etc.)
     std::string variant;          // Cut variant ("B-EX-3", etc.)
+
+    // From CUT2 block: polished stone dimensions
+    float       diameterMm = 0.0f;  // Proposed cut diameter in mm (0 = not available)
+    bool        isPolished = false;  // true = generated round brilliant model
 };
 
 struct CuttingPlane {
@@ -57,10 +61,13 @@ struct DiamondModel {
     std::vector<XRaySlice>      xraySlices;
     std::vector<std::string>    clarityGrades; // unique grades found
 
-    // Rough stone geometry availability
-    bool roughStoneAvailable = false;   // always false (encrypted)
-    std::string roughStoneNote = "Rough stone geometry is encrypted by OctoNus Oxygen software. "
-                                 "Only polished solution data can be extracted.";
+    // Rough stone geometry: reconstructed from CT07 contours (all 400 rotation angles)
+    bool roughStoneAvailable = false;
+    std::string roughStoneNote;
+
+    // Scale from CT07 bounding box (needed to place polished model in same space)
+    float ct07HalfWidthMm  = 0.0f;  // physical half-width in mm
+    float ct07HalfHeightMm = 0.0f;  // physical half-height in mm
 
     bool hasGeometry() const {
         for (const auto& sol : solutions)

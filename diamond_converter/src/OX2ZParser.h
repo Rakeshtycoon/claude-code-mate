@@ -53,6 +53,9 @@ private:
                                            uint32_t size);
     void buildMeshFromProfile(const std::vector<Vec3>& profile2D, DiamondSolution& sol,
                               int nSlices = 72);
+    // Generate parametric round brilliant in normalized space (R=normRadius, z in [-normPavDepth, +normCrownH])
+    void buildRoundBrilliantMesh(float normRadius, float normCrownH, float normPavDepth,
+                                  DiamondSolution& sol);
 
     // Geometry helpers
     std::vector<Triangle> readFaceIndices(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size);
