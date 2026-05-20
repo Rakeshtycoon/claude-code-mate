@@ -1,6 +1,7 @@
 """``adv-analyzer`` - command-line front end for the advkit toolkit.
 
 Subcommands:
+  extract      one-shot full extraction (metadata + slices + cloud + model)
   inspect      structural report (header, sections, slices, entropy)
   report       same analysis emitted as JSON
   hexdump      annotated hex view of any region
@@ -290,6 +291,99 @@ def cmd_surface(args) -> int:
     return 0
 
 
+def cmd_extract(args) -> int:
+    """One-shot full extraction: metadata, X-ray slices, surface point
+    cloud and an approximate 3D model, all written to one folder."""
+    from advkit.mesh.bodyscan import (
+        export_hull_mesh,
+        export_point_cloud,
+        extract_point_cloud,
+        scan_face_buffers,
+    )
+
+    adv = _open(args.file)
+    out = args.out
+    os.makedirs(out, exist_ok=True)
+    print(f"EXTRACT  {os.path.basename(adv.path)}  ->  {out}{os.sep}")
+    ok = fail = 0
+
+    def step(name, fn):
+        nonlocal ok, fail
+        try:
+            fn()
+            ok += 1
+        except Exception as exc:  # noqa: BLE001
+            fail += 1
+            print(f"  [FAIL] {name}: {exc}")
+            _log.warning("extract step %r failed: %s", name, exc)
+
+    def _meta():
+        summary = adv.summary()
+        summary["section_entropy"] = {
+            s.name: round(adv.region_entropy(s), 3) for s in adv.sections}
+        with open(os.path.join(out, "report.json"), "w",
+                  encoding="ascii") as fh:
+            json.dump(summary, fh, indent=2, default=str)
+        h = adv.header
+        with open(os.path.join(out, "report.txt"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(f"ADV FILE          {adv.path}\n")
+            fh.write(f"size              {adv.size} ({_human(adv.size)})\n")
+            fh.write(f"version           {h.version}\n")
+            fh.write(f"scan time         {h.scan_time}\n")
+            fh.write(f"calibration       {h.calibration:.6f}\n")
+            fh.write(f"metadata strings  {h.strings}\n")
+            fh.write(f"X-ray slices      {adv.slice_count}\n")
+            fh.write(f"preview thumbs    {len(adv.thumbnails)}\n")
+            for s in adv.sections:
+                fh.write(f"  section {s.name:<18} {s.start:>10}..{s.end:<10}"
+                         f" {s.kind}\n")
+        print("  [ok]   metadata    -> report.txt, report.json")
+    step("metadata", _meta)
+
+    def _slices():
+        sdir = os.path.join(out, "slices")
+        os.makedirs(sdir, exist_ok=True)
+        limit = (adv.slice_count if args.max_slices <= 0
+                 else min(args.max_slices, adv.slice_count))
+        n = 0
+        for i in range(limit):
+            try:
+                adv.slice_image(i).save(
+                    os.path.join(sdir, f"slice_{i:04d}.png"))
+                n += 1
+            except Exception:  # noqa: BLE001
+                pass
+        print(f"  [ok]   slices      -> slices{os.sep}  ({n}/{limit} PNG)")
+    if not args.no_slices:
+        step("slices", _slices)
+
+    def _geometry():
+        body = adv.section("header+body") or adv.sections[0]
+        faces = scan_face_buffers(adv.reader.buffer, body.start, body.end,
+                                  min_triangles=1500)
+        vend = faces[0].offset if faces else body.end
+        cloud = extract_point_cloud(adv.reader.buffer, body.start, vend,
+                                    denoise=False)
+        if len(cloud) == 0:
+            raise RuntimeError("no vertex geometry found in body block")
+        export_point_cloud(cloud, os.path.join(out, "pointcloud.ply"))
+        print(f"  [ok]   point cloud -> pointcloud.ply  ({len(cloud)} pts)")
+        info = {}
+        for ext in ("obj", "stl", "glb"):
+            info = export_hull_mesh(cloud, os.path.join(out,
+                                                        f"model_hull.{ext}"))
+        print(f"  [ok]   3D model    -> model_hull.obj/stl/glb  "
+              f"({info.get('faces', 0)} faces, "
+              f"vol={info.get('volume', 0) / 1e9:.2f} mm3, "
+              f"approx convex hull)")
+    step("geometry", _geometry)
+
+    adv.close()
+    print(f"done: {ok} step(s) ok, {fail} failed  ->  {out}{os.sep}")
+    return 0 if fail == 0 else 1
+
+
 # -- argument parser ------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -300,6 +394,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     p.add_argument("-q", "--quiet", action="store_true", help="warnings only")
     sub = p.add_subparsers(dest="command", required=True)
+
+    sp = sub.add_parser("extract", help="one-shot full extraction "
+                        "(metadata + slices + point cloud + 3D model)")
+    sp.add_argument("file")
+    sp.add_argument("-o", "--out", default="adv_extract",
+                    help="output folder (default: adv_extract)")
+    sp.add_argument("--max-slices", type=int, default=0,
+                    help="limit exported X-ray slices (0 = all)")
+    sp.add_argument("--no-slices", action="store_true",
+                    help="skip X-ray slice export")
+    sp.set_defaults(func=cmd_extract)
 
     sp = sub.add_parser("inspect", help="structural report")
     sp.add_argument("file")

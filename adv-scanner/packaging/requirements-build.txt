@@ -1,0 +1,8 @@
+# Dependencies for building the adv-analyzer executable with PyInstaller.
+# Install with:  python -m pip install -r packaging/requirements-build.txt
+numpy>=1.24
+pillow>=10.0
+scipy>=1.10
+scikit-image>=0.21
+trimesh>=4.0
+pyinstaller>=6.0

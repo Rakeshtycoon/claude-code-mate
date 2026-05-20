@@ -45,6 +45,7 @@ Dependencies: numpy, pillow, scipy, scikit-image.
 ## CLI usage
 
 ```bash
+adv-analyzer extract      sample.adv -o out/         # one-shot full extraction
 adv-analyzer inspect      sample.adv                 # structure + header report
 adv-analyzer report       sample.adv                 # same, as JSON
 adv-analyzer entropy      sample.adv                 # entropy profile
@@ -57,6 +58,33 @@ adv-analyzer volume       sample.adv -o vol.npy --downsample 4
 adv-analyzer inclusions   sample.adv --downsample 4 --json inclusions.json
 adv-analyzer surface      sample.adv -o hull.stl --downsample 4
 ```
+
+`extract` is the convenient all-in-one: it writes a metadata report
+(`report.txt` / `report.json`), every X-ray slice as a PNG, the surface
+point cloud (`pointcloud.ply`) and an approximate 3D model
+(`model_hull.obj/stl/glb`) into one output folder.
+
+## Standalone executable (Windows `.exe`)
+
+The CLI can be packaged into a single self-contained executable with
+PyInstaller — no Python install needed on the target machine.
+
+```bat
+REM on a Windows machine, from the adv-scanner project root:
+packaging\build_windows.bat
+```
+
+This installs the build dependencies, runs PyInstaller against
+[`packaging/adv-analyzer.spec`](packaging/adv-analyzer.spec) and produces
+`dist\adv-analyzer.exe`. Then:
+
+```bat
+dist\adv-analyzer.exe extract C:\path\to\scan.adv -o output_folder
+```
+
+Alternatively, the GitHub Actions workflow `build-windows-exe` builds the
+same `.exe` on a hosted Windows runner and publishes it as a downloadable
+artifact — trigger it from the repository's **Actions** tab.
 
 ## Library usage
 
@@ -89,7 +117,7 @@ tools       the adv-analyzer command-line front end
 
 ```bash
 pip install -e ".[dev]"
-pytest                                   # 46 tests, runs fully offline
+pytest                                   # 49 tests, runs fully offline
 ADV_SAMPLE=/path/to/real.adv pytest       # also exercises a genuine file
 ```
 

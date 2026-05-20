@@ -155,6 +155,50 @@ def scan_vertex_buffers(buf, start: int, end: int,
     return out
 
 
+def scan_vertex_segments(buf, start: int, end: int,
+                         min_vertices: int = 256) -> list[VertexBuffer]:
+    """Locate float64 XYZ coordinate runs at *any* byte alignment.
+
+    The rough-stone vertex pool is split into several contiguous f64-XYZ
+    segments joined by 6-byte separators, so successive segments sit at
+    different byte alignments (see ``docs/FORMAT.md`` §5). A purely
+    8-byte-aligned scan (:func:`scan_vertex_buffers`) only catches the
+    segments that happen to land on the grid. This scans all eight phase
+    offsets and merges the result, recovering the whole pool.
+    """
+    import numpy as np
+
+    raw = bytes(buf[start:end])
+    found: list[tuple[int, int]] = []
+    for phase in range(8):
+        n = (len(raw) - phase) // 8
+        if n < min_vertices * 3:
+            continue
+        d = np.frombuffer(raw[phase:phase + n * 8], dtype="<f8")
+        valid = np.isfinite(d) & (np.abs(d) < _COORD_LIMIT)
+        flags = np.concatenate(([0], valid.view(np.int8), [0]))
+        diff = np.diff(flags)
+        starts = np.where(diff == 1)[0]
+        ends = np.where(diff == -1)[0]
+        for rs, re in zip(starts, ends):
+            verts = int(re - rs) // 3
+            if verts >= min_vertices:
+                found.append((start + phase + int(rs) * 8, verts))
+    # keep the longest non-overlapping set (drops spurious cross-phase runs)
+    found.sort(key=lambda s: -s[1])
+    accepted: list[tuple[int, int]] = []
+    for off, verts in found:
+        seg_end = off + verts * 24
+        if any(off < ae and seg_end > ao for ao, ae in accepted):
+            continue
+        accepted.append((off, seg_end))
+    accepted.sort()
+    out = [VertexBuffer(o, e, (e - o) // 24) for o, e in accepted]
+    _log.info("found %d vertex segment(s) in [%d,%d] (any alignment)",
+              len(out), start, end)
+    return out
+
+
 @dataclass
 class BodyGeometry:
     """Summary of geometry discovered in a body block."""
@@ -236,7 +280,7 @@ def extract_point_cloud(buf, start: int, end: int,
     """
     import numpy as np
 
-    buffers = scan_vertex_buffers(buf, start, end, min_vertices)
+    buffers = scan_vertex_segments(buf, start, end, min_vertices)
     chunks = []
     for vb in buffers:
         raw = bytes(buf[vb.offset:vb.offset + vb.vertex_count * 24])
@@ -353,6 +397,29 @@ def export_surface_mesh(buf, start: int, end: int, path: str) -> dict:
     _log.info("exported surface mesh -> %s", path)
     return {"vertices": len(mesh.vertices), "faces": len(mesh.faces),
             "watertight": bool(mesh.is_watertight)}
+
+
+def export_hull_mesh(cloud, path: str, denoise: bool = True) -> dict:
+    """Export the convex hull of the surface point cloud as a mesh.
+
+    The exact triangle mesh stored in the body block could not be
+    reconstructed - the face buffers do not pair cleanly with the vertex
+    pool under any tested layout (see ``docs/FORMAT.md`` §5). The convex
+    hull of the surface vertices is a clean, watertight **approximate**
+    solid model of the rough stone; for a near-convex rough crystal it is
+    a usable stand-in. Returns basic mesh statistics.
+    """
+    import trimesh
+
+    pts = _remove_outliers(cloud) if denoise and len(cloud) > 32 else cloud
+    hull = trimesh.Trimesh(vertices=pts).convex_hull
+    hull.export(path)
+    _log.info("exported convex-hull model -> %s", path)
+    return {"vertices": int(len(hull.vertices)),
+            "faces": int(len(hull.faces)),
+            "volume": float(hull.volume),
+            "area": float(hull.area),
+            "watertight": bool(hull.is_watertight)}
 
 
 def export_point_cloud(cloud, path: str) -> None:
