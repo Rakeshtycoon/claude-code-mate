@@ -591,8 +591,10 @@ void OX2ZParser::parseCT07Contours(const std::vector<uint8_t>& data,
 
     // scale_x: normalise so half-width = 1 unit (radius 1.0)
     float scaleX = 1.0f / (xSpan * 0.5f);
-    // scale_z: preserve aspect ratio relative to x
-    float scaleZ = scaleX;  // square pixels assumed; ySpan may differ in real data
+    // scale_z: the scan has different pixel pitch in X vs Y (Y is ~9x finer).
+    // Preserve physical aspect ratio: z half-height = (ySpan/xSpan) * 0.5 normalised units.
+    // For a round brilliant D ≈ W, so ySpan/xSpan encodes the relative pixel pitch.
+    float scaleZ = 1.0f / (ySpan * 0.5f);
 
     // Convert pixel points to mm-like coordinates centred at origin
     std::vector<Vec3> mmPoints;
