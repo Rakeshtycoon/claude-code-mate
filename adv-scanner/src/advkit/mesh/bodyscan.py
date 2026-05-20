@@ -200,14 +200,37 @@ def scan_body_geometry(buf, start: int, end: int,
     )
 
 
+def _remove_outliers(cloud, k: int = 16, z: float = 3.0):
+    """Statistical outlier removal: drop points whose mean distance to their
+    ``k`` nearest neighbours is more than ``z`` MADs above the median.
+
+    This strips the thin auxiliary geometry (measurement gizmos, axes) that
+    is mixed into the body block, leaving the compact stone surface.
+    """
+    import numpy as np
+    from scipy.spatial import cKDTree
+
+    if len(cloud) <= k:
+        return cloud
+    tree = cKDTree(cloud)
+    dist, _ = tree.query(cloud, k=k + 1)
+    mean_d = dist[:, 1:].mean(axis=1)
+    med = np.median(mean_d)
+    mad = np.median(np.abs(mean_d - med)) or 1.0
+    keep = mean_d <= med + z * 1.4826 * mad
+    return cloud[keep]
+
+
 def extract_point_cloud(buf, start: int, end: int,
-                        min_vertices: int = 1000,
-                        dedup: bool = True):
+                        min_vertices: int = 256,
+                        dedup: bool = True,
+                        denoise: bool = False):
     """Extract every body-block vertex buffer as a single ``(N, 3)`` array.
 
     This is the most reliable geometry the body block yields: the laser
     scan's surface vertices as float64 XYZ. The container often stores the
-    geometry twice, so ``dedup`` drops exact duplicate points.
+    geometry twice, so ``dedup`` drops exact duplicate points; ``denoise``
+    additionally removes statistical outliers (stray auxiliary geometry).
 
     Returns a numpy ``float64`` array (requires numpy).
     """
@@ -223,6 +246,8 @@ def extract_point_cloud(buf, start: int, end: int,
     cloud = np.vstack(chunks)
     if dedup:
         cloud = np.unique(cloud, axis=0)
+    if denoise:
+        cloud = _remove_outliers(cloud)
     _log.info("extracted point cloud: %d vertices from %d buffer(s)",
               len(cloud), len(buffers))
     return cloud

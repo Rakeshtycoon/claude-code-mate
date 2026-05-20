@@ -152,9 +152,11 @@ def cmd_geometry(args) -> int:
     print(f"  face buffers      {len(geom.face_buffers)}  "
           f"(total {geom.total_triangles} triangles)")
     if args.export:
-        cloud = extract_point_cloud(adv.reader.buffer, body.start, body.end)
+        cloud = extract_point_cloud(adv.reader.buffer, body.start, body.end,
+                                    min_vertices=args.min_vertices,
+                                    denoise=args.denoise)
         export_point_cloud(cloud, args.export)
-        print(f"  point cloud       {len(cloud)} unique vertices "
+        print(f"  point cloud       {len(cloud)} vertices "
               f"-> {args.export}")
     vb = geom.largest_vertex_buffer()
     fb = geom.largest_face_buffer()
@@ -327,6 +329,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--top", type=int, default=10)
     sp.add_argument("--export", help="write the vertex point cloud here "
                     "(.ply / .obj / .xyz)")
+    sp.add_argument("--denoise", action="store_true",
+                    help="remove stray auxiliary geometry from the cloud")
     sp.add_argument("--json", help="write full JSON report here")
     sp.set_defaults(func=cmd_geometry)
 
