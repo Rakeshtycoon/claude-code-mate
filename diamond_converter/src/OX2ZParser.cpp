@@ -607,19 +607,36 @@ void OX2ZParser::parseCT07Contours(const std::vector<uint8_t>& data,
         mmPoints.push_back(mm);
     }
 
-    // Extract right-half profile (x >= 0): represents r(z) profile
-    std::vector<Vec3> profile;
+    // Build the radial profile r(z) by binning z-values and keeping the MAXIMUM
+    // radius (x) per bin.  The raw contour traces both the right and left sides of
+    // the silhouette at every height, so a naive "x >= 0" filter yields duplicate
+    // z-levels with two different radii — which produce two concentric shells when
+    // rotated.  Taking max(x) per z-bin gives a single clean outer envelope.
+    const int NUM_BINS = 600;
+    // z is normalised to [-1, +1]; bin index = (z + 1) / 2 * NUM_BINS
+    std::vector<float> maxRadiusPerBin(NUM_BINS, 0.0f);
+
     for (const auto& p : mmPoints) {
-        if (p.x >= 0.0f) {
-            profile.push_back(p);
+        float absX = std::abs(p.x);          // radius = |x| (both sides)
+        float zNorm = p.z;                    // already in [-1, +1]
+        int bin = static_cast<int>((zNorm + 1.0f) * 0.5f * NUM_BINS);
+        if (bin < 0) bin = 0;
+        if (bin >= NUM_BINS) bin = NUM_BINS - 1;
+        if (absX > maxRadiusPerBin[bin])
+            maxRadiusPerBin[bin] = absX;
+    }
+
+    // Convert bins back to Vec3 profile (radius, 0, z), skip empty bins
+    std::vector<Vec3> profile;
+    profile.reserve(NUM_BINS);
+    for (int b = 0; b < NUM_BINS; ++b) {
+        if (maxRadiusPerBin[b] > 0.0f) {
+            float zNorm = ((float)b + 0.5f) / NUM_BINS * 2.0f - 1.0f;
+            profile.push_back({maxRadiusPerBin[b], 0.0f, zNorm});
         }
     }
     if (profile.size() < 3) return;
-
-    // Sort profile by z (height) ascending
-    std::sort(profile.begin(), profile.end(), [](const Vec3& a, const Vec3& b) {
-        return a.z < b.z;
-    });
+    // Profile is already sorted by z (bin order = ascending z)
 
     if (progress) progress(92, "Building 3D mesh from contour profile...");
 
