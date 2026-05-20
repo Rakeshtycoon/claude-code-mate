@@ -131,6 +131,7 @@ bool OX2ZParser::parseOX2(const std::string& ox2Path, DiamondModel& model, Progr
 
     // Process entries by GUID type
     int processedXRay = 0;
+    int processedSol  = 0;
     for (size_t i = 0; i < entries.size(); ++i) {
         const auto& e = entries[i];
         if (e.offset + e.size > fileSize) continue;
@@ -152,13 +153,18 @@ bool OX2ZParser::parseOX2(const std::string& ox2Path, DiamondModel& model, Progr
             parseCutPlanes(data, e.offset, e.size, model);
             if (progress) progress(60, "Parsed cutting planes");
 
+        } else if (guidEquals(e.guid, GUID_SOLUTION_REC)) {
+            parseSolutionRecord(data, e.offset, e.size, model);
+            processedSol++;
+
         } else if (guidEquals(e.guid, GUID_XRAY_SLICE)) {
             parseXRaySlice(data, e.offset, e.size, e.id, model);
             processedXRay++;
         }
     }
 
-    if (progress) progress(85, "Processed " + std::to_string(processedXRay) + " X-ray slices");
+    if (progress) progress(85, "Processed " + std::to_string(processedXRay) +
+                           " X-ray slices, " + std::to_string(processedSol) + " solution records");
 
     // Collect unique clarity grades
     std::set<std::string> grades;
@@ -355,16 +361,154 @@ void OX2ZParser::parseXRaySlice(const std::vector<uint8_t>& data, uint32_t offse
     XRaySlice slice;
     slice.entryId = entryId;
 
-    // Name at offset 160 within the block
-    if (offset + 160 < data.size())
-        slice.name = extractString(data, offset + 160, 30);
+    // Locate embedded JPEG (0xFF 0xD8 0xFF marker); typically at block-relative offset ~670
+    static const uint8_t jpegSof[] = {0xFF, 0xD8, 0xFF};
+    static const uint8_t jpegEoi[] = {0xFF, 0xD9};
+    for (uint32_t j = 0; j + 2 < size; ++j) {
+        if (data[offset + j]     == jpegSof[0] &&
+            data[offset + j + 1] == jpegSof[1] &&
+            data[offset + j + 2] == jpegSof[2]) {
+            slice.jpegOffset = offset + j;
+            // Find JPEG end
+            for (uint32_t k = j + 2; k + 1 < size; ++k) {
+                if (data[offset + k] == jpegEoi[0] && data[offset + k + 1] == jpegEoi[1]) {
+                    slice.jpegSize = (offset + k + 2) - slice.jpegOffset;
+                    break;
+                }
+            }
+            break;
+        }
+    }
 
-    // Clarity grade at offset 174
-    if (offset + 174 < data.size())
+    // Scan the whole block for the inclusion layer name.
+    // Format: uint32 nameLen + name_bytes + uint32 gradeLen + grade_bytes
+    // e.g. \x0e\x00\x00\x00 + "Curved Crack-1" + \x02\x00\x00\x00 + "I1"
+    static const char* clarityTokens[] = {
+        "VVS1","VVS2","VS1","VS2","SI1","SI2","I1","I2","I3","IF","FL", nullptr
+    };
+    for (uint32_t j = 0; j + 8 < size && slice.name.empty(); ++j) {
+        uint32_t nameLen = readLE<uint32_t>(data, offset + j);
+        if (nameLen < 3 || nameLen > 60 || j + 4 + nameLen + 4 > size) continue;
+
+        // Verify all nameLen bytes are printable ASCII
+        bool allPrintable = true;
+        for (uint32_t k = 0; k < nameLen; ++k) {
+            uint8_t c = data[offset + j + 4 + k];
+            if (c < 32 || c >= 127) { allPrintable = false; break; }
+        }
+        if (!allPrintable) continue;
+
+        // Read grade length immediately after name
+        uint32_t gradeStart = j + 4 + nameLen;
+        uint32_t gradeLen   = readLE<uint32_t>(data, offset + gradeStart);
+        if (gradeLen < 2 || gradeLen > 6 || gradeStart + 4 + gradeLen > size) continue;
+
+        // Check grade bytes against known clarity tokens
+        for (int ci = 0; clarityTokens[ci]; ++ci) {
+            size_t tlen = strlen(clarityTokens[ci]);
+            if (tlen == gradeLen &&
+                memcmp(data.data() + offset + gradeStart + 4, clarityTokens[ci], tlen) == 0) {
+                slice.name         = extractString(data, offset + j + 4, nameLen);
+                slice.clarityGrade = clarityTokens[ci];
+                break;
+            }
+        }
+    }
+
+    // Fallback: try legacy fixed offsets if scan found nothing
+    if (slice.name.empty() && offset + 160 < data.size())
+        slice.name = extractString(data, offset + 160, 30);
+    if (slice.clarityGrade.empty() && offset + 174 < data.size())
         slice.clarityGrade = extractString(data, offset + 174, 10);
 
-    if (!slice.name.empty())
-        model.xraySlices.push_back(slice);
+    model.xraySlices.push_back(slice);
+}
+
+void OX2ZParser::parseSolutionRecord(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size,
+                                      DiamondModel& model) {
+    // Solution record blocks use MA02 and DS03 sub-structures.
+    // MA02: "MA02" + uint32 length + text like "66)  B: 0.93 (511.50) B-EX-3: 0.93 (I1)"
+    // DS03: "DS03" + uint32 length + text like "0.93 512 Diam 1" + uint32 + "Diam 1"
+
+    DiamondSolution sol;
+
+    // Find MA02 sub-block
+    static const uint8_t ma02Tag[] = {'M','A','0','2'};
+    for (uint32_t j = 0; j + 8 < size; ++j) {
+        if (memcmp(data.data() + offset + j, ma02Tag, 4) == 0) {
+            uint32_t textLen = readLE<uint32_t>(data, offset + j + 4);
+            if (textLen == 0 || textLen > 512 || j + 8 + textLen > size) break;
+            std::string text = extractString(data, offset + j + 8, textLen);
+            // Parse: "<id>)  B: <weight> (<price>) <variant>: <w2> (<clarity>)"
+            auto parseNum = [](const std::string& s, size_t pos) -> float {
+                try { return std::stof(s.substr(pos)); } catch (...) { return 0.0f; }
+            };
+            // Extract label ID (digits before ')')
+            size_t rp = text.find(')');
+            if (rp != std::string::npos)
+                try { sol.labelId = std::stoi(text.substr(0, rp)); } catch (...) {}
+            // Extract weight: after "B: "
+            size_t bpos = text.find("B: ");
+            if (bpos != std::string::npos) sol.weightCt = parseNum(text, bpos + 3);
+            // Extract price: first '(' after weight
+            size_t popen = text.find('(', bpos != std::string::npos ? bpos : 0);
+            if (popen != std::string::npos) sol.priceUsd = parseNum(text, popen + 1);
+            // Extract clarity: second '(' content
+            size_t popen2 = text.find('(', popen != std::string::npos ? popen + 1 : 0);
+            if (popen2 != std::string::npos) {
+                size_t pclose2 = text.find(')', popen2);
+                if (pclose2 != std::string::npos)
+                    sol.clarity = text.substr(popen2 + 1, pclose2 - popen2 - 1);
+            }
+            // Extract variant (word before second colon)
+            size_t colon2 = text.rfind(':', popen2 != std::string::npos ? popen2 : text.size());
+            if (colon2 != std::string::npos) {
+                size_t vstart = text.rfind(' ', colon2 - 1);
+                if (vstart != std::string::npos)
+                    sol.variant = text.substr(vstart + 1, colon2 - vstart - 1);
+            }
+            break;
+        }
+    }
+
+    // Find DS03 sub-block to get the solution name ("Diam 1")
+    static const uint8_t ds03Tag[] = {'D','S','0','3'};
+    for (uint32_t j = 0; j + 8 < size; ++j) {
+        if (memcmp(data.data() + offset + j, ds03Tag, 4) == 0) {
+            uint32_t textLen = readLE<uint32_t>(data, offset + j + 4);
+            if (textLen == 0 || textLen > 256 || j + 8 + textLen > size) break;
+            std::string text = extractString(data, offset + j + 8, textLen);
+            // Format: "<weight> <price_int> <name>" e.g. "0.93 512 Diam 1"
+            // Skip the two numeric tokens, rest is name
+            size_t sp1 = text.find(' ');
+            if (sp1 != std::string::npos) {
+                size_t sp2 = text.find(' ', sp1 + 1);
+                if (sp2 != std::string::npos && sp2 + 1 < text.size())
+                    sol.name = text.substr(sp2 + 1);
+            }
+            // Also read the second "Diam 1" string right after the first name
+            if (sol.name.empty()) sol.name = text;
+            break;
+        }
+    }
+
+    if (sol.labelId > 0 || !sol.name.empty()) {
+        // Merge with existing solution by name, or append
+        bool merged = false;
+        for (auto& existing : model.solutions) {
+            if (!sol.name.empty() && existing.name == sol.name) {
+                existing.labelId  = sol.labelId;
+                existing.weightCt = sol.weightCt;
+                existing.priceUsd = sol.priceUsd;
+                existing.clarity  = sol.clarity;
+                existing.variant  = sol.variant;
+                merged = true;
+                break;
+            }
+        }
+        if (!merged)
+            model.solutions.push_back(sol);
+    }
 }
 
 std::string OX2ZParser::extractString(const std::vector<uint8_t>& data, uint32_t offset, uint32_t maxLen) {

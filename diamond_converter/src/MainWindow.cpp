@@ -199,8 +199,18 @@ void MainWindow::updateInfoPanel() {
 
     info += QString("Solutions:  %1\n").arg(m_model.solutions.size());
     for (const auto& sol : m_model.solutions) {
-        info += QString("  ▸ %1  (%2 verts, %3 faces)\n")
+        QString meta;
+        if (sol.weightCt > 0.0f)
+            meta += QString("  %1ct").arg(sol.weightCt, 0, 'f', 2);
+        if (sol.priceUsd > 0.0f)
+            meta += QString("  $%1").arg(sol.priceUsd, 0, 'f', 2);
+        if (!sol.clarity.empty())
+            meta += QString("  %1").arg(QString::fromStdString(sol.clarity));
+        if (sol.labelId > 0)
+            meta += QString("  [ID %1]").arg(sol.labelId);
+        info += QString("  ▸ %1%2  (%3 verts, %4 faces)\n")
                 .arg(QString::fromStdString(sol.name))
+                .arg(meta)
                 .arg(sol.vertices.size())
                 .arg(sol.faces.size());
     }
@@ -244,26 +254,47 @@ void MainWindow::updateInfoPanel() {
 
     addItem(nullptr, "Entry 3", "Rough Stone", "439,429 B", "⚠ ENCRYPTED");
 
-    auto* solItem = addItem(nullptr, "Entry 4", "Polished Stone", "202,364 B",
-                            QString("%1 solutions").arg(m_model.solutions.size()));
-    for (const auto& sol : m_model.solutions) {
-        addItem(solItem, QString::fromStdString(sol.name), "Geometry",
-                QString("%1v %2f").arg(sol.vertices.size()).arg(sol.faces.size()), "");
+    // Solution records (from solution record blocks)
+    bool hasSolRec = false;
+    for (const auto& sol : m_model.solutions)
+        if (sol.labelId > 0) { hasSolRec = true; break; }
+
+    if (hasSolRec) {
+        auto* solRecItem = addItem(nullptr, "Solution Records", "GUID_SOLUTION_REC",
+                                   QString("%1 records").arg(m_model.solutions.size()), "");
+        for (const auto& sol : m_model.solutions) {
+            QString detail;
+            if (sol.weightCt > 0) detail += QString("%1ct ").arg(sol.weightCt, 0, 'f', 2);
+            if (sol.priceUsd > 0) detail += QString("$%1 ").arg(sol.priceUsd, 0, 'f', 0);
+            if (!sol.clarity.empty()) detail += QString::fromStdString(sol.clarity);
+            addItem(solRecItem, QString::fromStdString(sol.name.empty() ?
+                    "ID " + std::to_string(sol.labelId) : sol.name),
+                    "Solution", "-", detail);
+        }
+    } else {
+        auto* solItem = addItem(nullptr, "Polished Stone", "GUID_POLISHED",
+                                QString("%1 solutions").arg(m_model.solutions.size()), "");
+        for (const auto& sol : m_model.solutions) {
+            addItem(solItem, QString::fromStdString(sol.name), "Geometry",
+                    QString("%1v %2f").arg(sol.vertices.size()).arg(sol.faces.size()), "");
+        }
     }
 
-    addItem(nullptr, "Entry 5", "Cutting Planes", "389 B",
-            QString("%1 marking pts").arg(m_model.markingPoints.size()));
+    if (!m_model.cuttingPlanes.empty() || !m_model.markingPoints.empty())
+        addItem(nullptr, "Cutting Planes", "GUID_CUT_PLANES", "-",
+                QString("%1 marking pts").arg(m_model.markingPoints.size()));
 
-    auto* xrayItem = addItem(nullptr, "Entries 6-312", "X-Ray Scans",
-                             QString("%1 slices").arg(m_model.xraySlices.size()),
-                             "Clarity: " + info.section("Clarity Grades:", 1).trimmed().split('\n')[0]);
+    auto* xrayItem = addItem(nullptr, "X-Ray Slices", "GUID_XRAY_SLICE",
+                             QString("%1 slices").arg(m_model.xraySlices.size()), "");
 
-    // Show first 5 xray slices
-    int shown = 0;
+    // Show all xray slices (usually ≤ 5)
     for (const auto& xr : m_model.xraySlices) {
-        if (shown++ >= 5) { addItem(xrayItem, "...", "", "", ""); break; }
-        addItem(xrayItem, QString::fromStdString(xr.name), "XRay", "",
-                QString::fromStdString(xr.clarityGrade));
+        QString detail = QString::fromStdString(xr.clarityGrade);
+        if (xr.jpegSize > 0)
+            detail += QString("  JPEG %1 KB").arg(xr.jpegSize / 1024);
+        addItem(xrayItem, QString::fromStdString(xr.name.empty() ?
+                "Slice " + std::to_string(xr.entryId) : xr.name),
+                "XRay", "-", detail);
     }
 
     m_structTree->expandAll();

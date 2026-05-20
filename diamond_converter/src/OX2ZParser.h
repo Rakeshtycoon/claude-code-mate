@@ -42,6 +42,9 @@ private:
                         DiamondModel& model);
     void parseXRaySlice(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size,
                         uint32_t entryId, DiamondModel& model);
+    // New: V2 solution record block (GUID_SOLUTION_REC) with MA02/DS03 sub-structures
+    void parseSolutionRecord(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size,
+                             DiamondModel& model);
 
     // Geometry helpers
     std::vector<Triangle> readFaceIndices(const std::vector<uint8_t>& data, uint32_t offset, uint32_t size);
