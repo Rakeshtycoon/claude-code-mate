@@ -11,14 +11,17 @@ from the command line or as a Python library.
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what is done vs. planned and
 > [`docs/FORMAT.md`](docs/FORMAT.md) for the reverse-engineering findings.
 
-## What it does (verified on a real 47 MB `.adv` sample)
+## What it does (verified across 5 real `.adv` samples, 25–48 MB)
 
 - Parses the header: GUIDs, version, Windows FILETIME scan time,
   calibration scalar, job id / scan mode / UUID strings.
 - Carves the embedded JPEG streams with a **marker-aware** parser that
   rejects false-positive `FF D8` markers inside binary data.
-- Identifies **299 grayscale 1024×1280 X-ray slices** and **~200 RGB
-  preview thumbnails**, and flags corrupt/truncated streams.
+- Identifies the **300 grayscale 1024×1280 X-ray slices** and the RGB
+  preview thumbnails, and flags corrupt/truncated streams.
+- Discovers the **3D mesh geometry** in the body block — `float64` XYZ
+  vertex buffers and `uint32` triangle-index buffers (the laser-scanned
+  outer surface).
 - Reconstructs a 3D voxel volume (with downsampling and damaged-slice
   interpolation).
 - Detects internal inclusions (Otsu body segmentation → hull fill →
@@ -26,6 +29,9 @@ from the command line or as a Python library.
 - Extracts isosurfaces (marching cubes) and exports STL / OBJ / PLY.
 - Provides binary-inspection tooling (entropy profiling, signature
   scanning, dimension brute-forcing) to keep decoding unknown regions.
+
+See [`docs/FORMAT.md`](docs/FORMAT.md) for the full, evidence-graded
+reverse-engineering write-up.
 
 ## Install
 
@@ -43,6 +49,7 @@ adv-analyzer inspect      sample.adv                 # structure + header report
 adv-analyzer report       sample.adv                 # same, as JSON
 adv-analyzer entropy      sample.adv                 # entropy profile
 adv-analyzer hexdump      sample.adv --offset 0 --length 512
+adv-analyzer geometry     sample.adv --json mesh.json # mesh vertex/face buffers
 adv-analyzer discover     sample.adv                 # structure discovery
 adv-analyzer slices       sample.adv -o out/slices   # export X-ray slices as PNG
 adv-analyzer thumbnails   sample.adv -o out/thumbs
@@ -73,7 +80,7 @@ Layered, low → high; each layer depends only on those above it:
 core        memory-mapped IO, logging
 parsers     JPEG carving, binary inspection, the .adv container model
 volume      voxel-volume reconstruction, automated structure discovery
-mesh        isosurface extraction and mesh export
+mesh        body-block geometry discovery, isosurface extraction, export
 inclusion   volumetric defect detection
 tools       the adv-analyzer command-line front end
 ```
@@ -82,7 +89,7 @@ tools       the adv-analyzer command-line front end
 
 ```bash
 pip install -e ".[dev]"
-pytest                                   # 41 tests, runs fully offline
+pytest                                   # 46 tests, runs fully offline
 ADV_SAMPLE=/path/to/real.adv pytest       # also exercises a genuine file
 ```
 

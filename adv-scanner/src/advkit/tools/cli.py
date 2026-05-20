@@ -6,6 +6,7 @@ Subcommands:
   hexdump      annotated hex view of any region
   entropy      sliding-window entropy profile
   discover     brute-force structure discovery on a raw region
+  geometry     discover mesh vertex/face buffers in the body block
   slices       export internal X-ray slices as PNG
   thumbnails   export preview thumbnails as PNG
   volume       reconstruct and save the 3D voxel volume
@@ -129,6 +130,40 @@ def cmd_discover(args) -> int:
     for g in brute_force_dimensions(block, max_width=args.max_width):
         print(f"    width={g.width:<5} bpp={g.bytes_per_pixel}  "
               f"corr={g.row_correlation:.4f}")
+    adv.close()
+    return 0
+
+
+def cmd_geometry(args) -> int:
+    from advkit.mesh.bodyscan import scan_body_geometry
+
+    adv = _open(args.file)
+    body = adv.section("header+body") or adv.sections[0]
+    geom = scan_body_geometry(adv.reader.buffer, body.start, body.end,
+                              min_vertices=args.min_vertices,
+                              min_triangles=args.min_triangles)
+    print(f"BODY GEOMETRY  section={body.name}  {body.start}..{body.end}")
+    print(f"  vertex buffers    {len(geom.vertex_buffers)}  "
+          f"(total {geom.total_vertices} float64 XYZ vertices)")
+    print(f"  face buffers      {len(geom.face_buffers)}  "
+          f"(total {geom.total_triangles} triangles)")
+    vb = geom.largest_vertex_buffer()
+    fb = geom.largest_face_buffer()
+    if vb:
+        print(f"  largest vbuf      {vb.vertex_count} verts @ {vb.offset} "
+              f"({_human(vb.byte_size)})")
+    if fb:
+        print(f"  largest fbuf      {fb.triangle_count} tris @ {fb.offset}  "
+              f"max index={fb.max_index}")
+    for i, f in enumerate(sorted(geom.face_buffers,
+                                 key=lambda x: x.triangle_count,
+                                 reverse=True)[:args.top]):
+        print(f"    face buffer #{i}: {f.triangle_count} tris  "
+              f"[{f.offset}..{f.end}]  max_index={f.max_index}")
+    if args.json:
+        with open(args.json, "w", encoding="ascii") as fh:
+            json.dump(geom.as_dict(), fh, indent=2)
+        print(f"  full report -> {args.json}")
     adv.close()
     return 0
 
@@ -275,6 +310,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="bytes to sample from the section")
     sp.add_argument("--max-width", type=int, default=2048)
     sp.set_defaults(func=cmd_discover)
+
+    sp = sub.add_parser("geometry", help="discover mesh geometry in the body block")
+    sp.add_argument("file")
+    sp.add_argument("--min-vertices", type=int, default=256)
+    sp.add_argument("--min-triangles", type=int, default=64)
+    sp.add_argument("--top", type=int, default=10)
+    sp.add_argument("--json", help="write full JSON report here")
+    sp.set_defaults(func=cmd_geometry)
 
     sp = sub.add_parser("slices", help="export X-ray slices as PNG")
     sp.add_argument("file")

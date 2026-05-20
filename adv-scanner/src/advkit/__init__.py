@@ -6,7 +6,7 @@ Layered architecture (clean dependency direction, low -> high):
     core        memory-mapped IO, logging
     parsers     JPEG carving, binary inspection, the .adv container model
     volume      voxel-volume reconstruction, automated structure discovery
-    mesh        isosurface extraction and mesh export
+    mesh        body-block geometry discovery, isosurface extraction, export
     inclusion   volumetric defect detection
     tools       the ``adv-analyzer`` command-line front end
 

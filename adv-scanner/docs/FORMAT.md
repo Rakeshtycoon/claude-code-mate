@@ -1,8 +1,9 @@
 # `.adv` File Format — Reverse-Engineering Notes
 
-Status: **Phase 1 — partial, evidence-based.** Everything below was derived
-by analysing a real sample (`2548-564-A.adv`, 47,694,840 bytes) with the
-tools in this repo. Claims are graded:
+Status: **Phase 1 — evidence-based, multi-sample.** Findings were derived
+by analysing **5 real samples** (sizes 25–48 MB) with the tools in this
+repo, and cross-checking every structural claim across all of them.
+Claims are graded:
 
 - **[CONFIRMED]** — verified by decoding actual data.
 - **[STRONG]** — multiple consistent signals, not yet byte-proven.
@@ -16,19 +17,21 @@ is not yet understood it says so.
 ## 1. Top-level layout `[CONFIRMED]`
 
 The `.adv` file is a single-stream serialized object graph (no central
-directory). For the analysed sample:
+directory). Across all 5 samples the same five sections appear, in the
+same order, with sizes that scale per stone:
 
-| Region              | Offset range            | Size     | Entropy | Content |
-|---------------------|-------------------------|----------|---------|---------|
-| `header + body`     | `0 – 32,013,434`        | 30.5 MB  | ~7.3    | Header, then a large uncompressed high-entropy block |
-| `xray_slices`       | `32,013,434 – 45,379,863` | 12.7 MB | 7.74    | **299** grayscale JPEG slices, 1024×1280 |
-| `intermediate`      | `45,379,863 – 47,034,387` | 1.6 MB  | 6.59    | Undecoded binary block |
-| `preview_thumbnails`| `47,034,387 – 47,694,692` | 645 KB  | 7.47    | **~200** RGB JPEG thumbnails, 98×98 |
-| `trailer`           | `47,694,692 – 47,694,840` | 148 B   | 5.23    | Tail record |
+| Region              | Content | Notes |
+|---------------------|---------|-------|
+| `header + body`     | Header, then the serialized 3D model (see §5) | 14–32 MB |
+| `xray_slices`       | **300** grayscale JPEG slices, 1024×1280 | always 300 |
+| `intermediate`      | Undecoded binary block | 0.7–1.7 MB |
+| `preview_thumbnails`| 188–214 RGB JPEG thumbnails, 98×98 | per-stone |
+| `trailer`           | Tail record | **always 148 B** |
 
 The slice/thumbnail runs are located by the marker-aware JPEG carver
 (`advkit.parsers.jpeg`), not by guesswork — each stream is validated by a
-full marker walk to its EOI plus a sane SOF.
+full marker walk to its EOI plus a sane SOF. The 300-slice count and the
+148-byte trailer are invariant across every sample.
 
 ## 2. Header `[CONFIRMED]`
 
@@ -42,7 +45,7 @@ Little-endian throughout. Fields verified against the sample:
 | `24`   | u32         | `filesize − 76`                        | Size field B |
 | `32`   | GUID (16 B) | `aa334d5d-e429-4c99-b2dc-4c2bef518995` | Secondary object GUID |
 | `60`   | FILETIME (8 B) | `2026-04-03T21:49:53Z`              | Scan timestamp (Windows FILETIME) |
-| `68`   | f64         | `1.842`                                | Calibration scalar (voxel spacing candidate) `[STRONG]` |
+| `68`   | f64         | `1.842` (1.97–2.57 across samples)     | Calibration scalar — varies per stone `[CONFIRMED]` |
 | `76–123` | f64[]     | mostly `-1.0` / `0.0`                  | AABB / transform slots, sentinel-initialised `[STRONG]` |
 
 After the fixed block come **u32-length-prefixed strings** (a classic
@@ -58,15 +61,17 @@ offsets) — see `[OPEN]` below.
 
 ## 3. Internal X-ray slices `[CONFIRMED]`
 
-- 299 baseline JPEG streams, **1024×1280, 1 component (grayscale)**.
+- **300** baseline JPEG streams, **1024×1280, 1 component (grayscale)** —
+  the count is identical in every sample.
 - Stored back-to-back with **no padding** between them.
 - These are the internal scan images described in the business brief
   ("~300 X-ray slices"). Standard JFIF — the embedded Huffman/quantisation
   tables are the textbook tables, which is what first revealed the file
   contains JPEGs.
-- One slice in the sample (index 32) is **truncated/corrupt** — it fails to
-  decode. The parser flags it (`AdvFile.damaged_slices`) and the volume
-  builder interpolates it from neighbours instead of crashing.
+- Damaged slices occur in real data (e.g. index 32 / index 28 in two
+  samples) — they fail to decode. The parser flags them
+  (`AdvFile.damaged_slices`) and the volume builder interpolates from
+  neighbours instead of crashing.
 
 ## 4. Preview thumbnails `[STRONG]`
 
@@ -76,24 +81,37 @@ offsets) — see `[OPEN]` below.
 - Interpretation: multi-angle preview renders / photographs of the rough
   stone, each tagged with a view orientation.
 
-## 5. The 30.5 MB leading body block `[OPEN]`
+## 5. The body block — serialized 3D model `[STRONG]`
 
-This is the main unknown.
+The block between the header and the slice run is **not compressed** (no
+zlib/lz4/zstd; the `78 9c` byte pairs are below random expectation) and
+**not a raw image stack** (no stride correlation peak). Decoding it across
+all 5 samples shows it is a **serialized 3D scene** — the laser-scanned
+outer surface mesh of the rough diamond, plus connectivity and raster
+data. Identified buffer types:
 
-- **Not** zlib/lz4/zstd compressed — no decodable streams found; the 427
-  `78 9c` byte pairs are below random expectation, i.e. coincidental.
-- High, fairly uniform entropy (~7.3–7.6).
-- Brute-forcing image strides yields no sharp adjacent-row correlation
-  peak, so it is not a simple raw `width×height` image stack.
-- Working hypotheses (need more samples to decide):
-  1. The merged **voxel volume** (raw `uint8`/`uint16`), possibly tiled or
-     block-shuffled — which would defeat a naive stride search.
-  2. A second image stack in a non-JFIF codec.
-  3. The laser **outer-surface** scan (point cloud / mesh) stored in a
-     packed binary form.
+- **Vertex buffers** `[CONFIRMED]` — contiguous arrays of `float64` XYZ
+  coordinates. Values are mixed-sign and within ±~30,000 (microns → a
+  centred few-mm model). Verified by reading triangles' indices back
+  against them.
+- **Face buffers** `[CONFIRMED]` — `uint32` triangle lists framed as
+  `[3][i0][i1][i2]`, 16 bytes per triangle; the constant `3` is the
+  per-face vertex count. Reliably detected (the framing is unambiguous).
+  Samples carry ~12 face buffers of a near-constant ~12,300 triangles
+  each → the mesh is stored in fixed-size chunks.
+- **Index/connectivity buffers** `[STRONG]` — runs of small `uint32`
+  values (adjacency / edge lists).
+- **Raster regions** `[OPEN]` — ~1024-wide 16-bit areas (entropy ~5–6,
+  30–55 % zeros) — candidate depth maps or a voxel slab.
 
-`adv-analyzer discover` is the tool built specifically to keep chipping at
-this region.
+Still `[OPEN]`: the precise per-object framing (object headers, exact
+vertex/face counts, which vertex buffer pairs with which face buffer).
+The detected `float64` vertex runs are fragmented and currently account
+for fewer vertices than the face indices reference — so vertices are
+either chunked or interleaved with per-object records not yet decoded.
+
+`adv-analyzer geometry` reports every vertex/face buffer it can verify;
+`adv-analyzer discover` continues probing the raster regions.
 
 ## 6. Reverse-engineering assumptions
 
@@ -112,6 +130,7 @@ Reproduce with:
 ```
 adv-analyzer inspect  sample.adv     # section map + header
 adv-analyzer entropy  sample.adv     # entropy profile
-adv-analyzer discover sample.adv     # structure discovery on the body block
+adv-analyzer geometry sample.adv     # mesh vertex/face buffers in the body
+adv-analyzer discover sample.adv     # structure discovery on raw regions
 adv-analyzer hexdump  sample.adv --offset 0 --length 512
 ```

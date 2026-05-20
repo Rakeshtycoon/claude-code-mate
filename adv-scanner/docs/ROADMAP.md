@@ -16,6 +16,7 @@ next, and where the hard problems are.
 | `.adv` container parser (header, sections, metadata) | `parsers.adv` | done |
 | Volume reconstruction from slices (+ damaged-slice interpolation) | `volume.slices` | done |
 | Automated structure discovery (dimension brute-force) | `volume.discover` | done |
+| Body-block geometry discovery (mesh vertex/face buffers) | `mesh.bodyscan` | done |
 | Inclusion detection (Otsu + fill-holes + 3D CCL) | `inclusion.detector` | done |
 | Isosurface extraction + STL/OBJ/PLY export | `mesh.surface` | done |
 | `adv-analyzer` CLI | `tools.cli` | done |
@@ -27,10 +28,14 @@ image/voxel blocks, ship a binary analysis tool, and produce this roadmap.
 
 ## Phase 1 — finish format decoding (next)
 
-1. Decode the 30.5 MB body block (see `FORMAT.md §5`). Needs ≥3 more
-   sample files to diff structurally. This is the **critical-path unknown**.
-2. Map the remaining header u32 table (counts vs. offsets).
-3. Decode the 1.6 MB intermediate block and the 148-byte trailer.
+1. **Body block** — identified as a serialized 3D mesh scene (`FORMAT.md
+   §5`); `mesh.bodyscan` already extracts verified vertex/face buffers.
+   Remaining: the per-object framing so a complete watertight outer mesh
+   can be reassembled, and the ~1024-wide raster regions.
+2. Map the remaining header u32 table (counts vs. offsets). Note the
+   header is **variable-length** — the embedded length-prefixed strings
+   shift every field after them, so it must be parsed as a stream.
+3. Decode the intermediate block and the 148-byte trailer.
 4. Formalise the layout as a [Kaitai Struct](https://kaitai.io) `.ksy`
    spec so other languages get a parser for free.
 
@@ -42,8 +47,9 @@ image/voxel blocks, ship a binary analysis tool, and produce this roadmap.
 
 ## Phase 3 — surface engine
 
-- Confirm whether the laser outer mesh lives in the body block; if so add a
-  dedicated decoder. Otherwise treat the slice-stack isosurface as the hull.
+- The laser outer mesh **is** in the body block (confirmed). Promote
+  `mesh.bodyscan` from a buffer scanner to a full object-graph decoder so
+  the rough-stone hull is reconstructed directly from the file.
 - Mesh repair: hole filling, decimation, watertight enforcement, GLTF export.
 
 ## Phase 4 — inclusion intelligence
@@ -92,9 +98,11 @@ already the right hand-off shape for a model:
 
 ## Known risks
 
-- **Single sample.** Every `[CONFIRMED]` claim holds for one file. More
-  samples are required before hard-coding any offset beyond the header.
-- **Body block.** If it is the primary volumetric payload, Phase 2 cannot
-  be fully realised until §5 is solved.
+- **Five samples**, all from one scanner/day. `[CONFIRMED]` claims hold
+  across all five; a wider corpus is still wise before hard-coding any
+  offset past the variable-length header.
+- **Body-block framing.** Buffer *types* are decoded; the object framing
+  that stitches them into one mesh is not — Phase 3's full hull decoder
+  depends on it.
 - The desktop GUI / GPU stack cannot be built or tested in a headless
   environment — it is intentionally scoped as a separate downstream effort.
