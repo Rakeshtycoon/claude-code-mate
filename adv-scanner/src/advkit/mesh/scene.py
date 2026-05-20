@@ -1,17 +1,20 @@
-"""Reconstruct a complete diamond model and export it to standard formats.
+"""Approximate diamond model from the stacked X-ray images.
 
-This assembles the deliverable the planning software visualises: the rough
-diamond's outer surface plus its internal inclusions (rendered green by the
-planner). Both are reconstructed from the container's 300 internal X-ray
-slices:
+WARNING - geometric approximation. The 300 X-ray images are rotational
+projections (the stone spins on a spindle), not parallel CT slices, so
+stacking them is not a true 3D reconstruction. This module is a quick
+visual/QA aid; the geometrically correct rough-stone surface comes from
+the body-block mesh (see :mod:`advkit.mesh.bodyscan`), and a true volume
+would require tomographic reconstruction (filtered back-projection).
+
+Within that caveat it builds:
 
 * **body**       - isosurface of the segmented, hole-filled stone hull.
 * **inclusions** - isosurface of the enclosed dark regions found by
   :mod:`advkit.inclusion.detector`.
 
-The result is exported via :mod:`trimesh` to OBJ / PLY / STL / GLB, with
-the body shown translucent white and the inclusions green so the output
-matches what the planner shows on screen.
+and exports via :mod:`trimesh` to OBJ / PLY / STL / GLB with the body
+translucent white and the inclusions green.
 """
 from __future__ import annotations
 
