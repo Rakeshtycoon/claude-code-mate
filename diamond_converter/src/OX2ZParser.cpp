@@ -239,20 +239,23 @@ void OX2ZParser::parsePolishedStone(const std::vector<uint8_t>& data, uint32_t o
         sol.name = "Polished Stone";
         model.solutions.push_back(sol);
     }
+    while (model.solutions.size() < 2) {
+        DiamondSolution sol;
+        sol.name = "Diam " + std::to_string(model.solutions.size() + 1);
+        model.solutions.push_back(sol);
+    }
 
-    auto& sol = model.solutions[0];
+    // Diam 1: vertices (double precision) + face block
+    auto& sol1 = model.solutions[0];
+    sol1.vertices = readVertices(data, offset + ENTRY4_VERTEX_OFFSET,
+                                 ENTRY4_VERTEX_END - ENTRY4_VERTEX_OFFSET);
+    sol1.faces    = readFaceIndices(data, offset + ENTRY4_FACE_OFFSET, ENTRY4_FACE_SIZE);
 
-    // Face index block: at entry4 + ENTRY4_FACE_OFFSET
-    // Each face: (v0:uint32, v1:uint32, v2:uint32, n:uint32) = 16 bytes
-    uint32_t faceBlockOffset = offset + ENTRY4_FACE_OFFSET;
-    uint32_t faceBlockSize   = ENTRY4_FACE_SIZE;
-    sol.faces = readFaceIndices(data, faceBlockOffset, faceBlockSize);
-
-    // Vertex data: at entry4 + ENTRY4_VERTEX_OFFSET, stride = ENTRY4_VERTEX_STRIDE
-    // XYZ starts at ENTRY4_XYZ_OFFSET within each stride record
-    uint32_t vertStart = offset + ENTRY4_VERTEX_OFFSET;
-    uint32_t vertEnd   = offset + ENTRY4_VERTEX_END;
-    sol.vertices = readVertices(data, vertStart, vertEnd - vertStart);
+    // Diam 2: 904 vertices (subset of Diam1 positions) + separate face block
+    auto& sol2 = model.solutions[1];
+    sol2.vertices = readVertices(data, offset + ENTRY4_D2_VERTEX_OFFSET,
+                                 ENTRY4_D2_VERTEX_END - ENTRY4_D2_VERTEX_OFFSET);
+    sol2.faces    = readFaceIndices(data, offset + ENTRY4_D2_FACE_OFFSET, ENTRY4_D2_FACE_SIZE);
 }
 
 std::vector<Triangle> OX2ZParser::readFaceIndices(const std::vector<uint8_t>& data,
@@ -267,10 +270,9 @@ std::vector<Triangle> OX2ZParser::readFaceIndices(const std::vector<uint8_t>& da
         uint32_t v0 = readLE<uint32_t>(data, o);
         uint32_t v1 = readLE<uint32_t>(data, o + 4);
         uint32_t v2 = readLE<uint32_t>(data, o + 8);
-        uint32_t n  = readLE<uint32_t>(data, o + 12);
+        // 4th uint32 is a face-group index (0-903), not vertex count — ignore
 
-        // Validate: reasonable vertex indices and n==3 (triangles)
-        if (n == 3 && v0 < 100000 && v1 < 100000 && v2 < 100000) {
+        if (v0 < 100000 && v1 < 100000 && v2 < 100000) {
             faces.push_back({v0, v1, v2});
         }
     }
@@ -281,25 +283,25 @@ std::vector<Vec3> OX2ZParser::readVertices(const std::vector<uint8_t>& data,
                                             uint32_t offset, uint32_t size) {
     std::vector<Vec3> vertices;
 
-    // Stride=24 bytes per record, XYZ at byte offset 4 within record
+    // Each vertex: 3 x float64 (double), stride=24, XYZ_OFFSET=0
     uint32_t numRecords = size / ENTRY4_VERTEX_STRIDE;
 
     for (uint32_t i = 0; i < numRecords; ++i) {
-        uint32_t recordStart = offset + i * ENTRY4_VERTEX_STRIDE + ENTRY4_XYZ_OFFSET;
-        if (recordStart + 12 > data.size()) break;
+        uint32_t base = offset + i * ENTRY4_VERTEX_STRIDE + ENTRY4_XYZ_OFFSET;
+        if (base + 24 > data.size()) break;
 
-        Vec3 v;
-        v.x = readFloat(data, recordStart);
-        v.y = readFloat(data, recordStart + 4);
-        v.z = readFloat(data, recordStart + 8);
+        double dx, dy, dz;
+        memcpy(&dx, data.data() + base,      8);
+        memcpy(&dy, data.data() + base + 8,  8);
+        memcpy(&dz, data.data() + base + 16, 8);
 
-        // Only keep valid coordinates
+        Vec3 v{ (float)dx, (float)dy, (float)dz };
+
         if (std::abs(v.x) < COORD_VALID_MAX && std::abs(v.y) < COORD_VALID_MAX &&
             std::abs(v.z) < COORD_VALID_MAX && std::isfinite(v.x) &&
             std::isfinite(v.y) && std::isfinite(v.z)) {
             vertices.push_back(v);
         } else {
-            // Insert zero vertex to maintain index alignment
             vertices.push_back({0.0f, 0.0f, 0.0f});
         }
     }

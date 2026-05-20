@@ -70,13 +70,20 @@ private:
     std::string m_lastError;
     std::string m_tempDir;
 
-    // Geometry extraction constants (discovered through analysis)
-    static constexpr uint32_t ENTRY4_VERTEX_OFFSET = 96;    // bytes from entry4 start
-    static constexpr uint32_t ENTRY4_VERTEX_END    = 50568; // bytes from entry4 start
-    static constexpr uint32_t ENTRY4_VERTEX_STRIDE = 24;    // bytes per vertex record
-    static constexpr uint32_t ENTRY4_XYZ_OFFSET    = 4;     // XYZ position within stride
-    static constexpr uint32_t ENTRY4_FACE_OFFSET   = 50568; // face index block offset
-    static constexpr uint32_t ENTRY4_FACE_SIZE     = 80;    // face index block size
-    static constexpr uint32_t ENTRY4_FACE_STRIDE   = 16;    // (v0, v1, v2, n) each 4 bytes
-    static constexpr float    COORD_VALID_MAX       = 25.0f; // max valid coordinate (mm)
+    // Geometry extraction constants (binary-analysed from real .ox2 file)
+    // Vertices are 64-bit doubles, 3 per record, stride 24 bytes
+    static constexpr uint32_t ENTRY4_VERTEX_OFFSET = 96;     // bytes from entry4 start
+    static constexpr uint32_t ENTRY4_VERTEX_END    = 50568;  // bytes from entry4 start (2103 verts)
+    static constexpr uint32_t ENTRY4_VERTEX_STRIDE = 24;     // bytes per vertex (3 doubles)
+    static constexpr uint32_t ENTRY4_XYZ_OFFSET    = 0;      // doubles start at byte 0 of stride
+    // Diam 1 face block: [v0,v1,v2,group] each uint32, stride 16, 1804 triangles
+    static constexpr uint32_t ENTRY4_FACE_OFFSET   = 72360;  // 0x011aa8 from entry4 start
+    static constexpr uint32_t ENTRY4_FACE_SIZE     = 28864;  // 1804 * 16 bytes
+    static constexpr uint32_t ENTRY4_FACE_STRIDE   = 16;     // v0,v1,v2 + group_id
+    // Diam 2: shares vertex array, different face block at 0x01e030
+    static constexpr uint32_t ENTRY4_D2_VERTEX_OFFSET = 50664;  // 0xC5E8, 904 verts
+    static constexpr uint32_t ENTRY4_D2_VERTEX_END    = 72360;  // 0x011aa8
+    static constexpr uint32_t ENTRY4_D2_FACE_OFFSET   = 122928; // 0x01e030
+    static constexpr uint32_t ENTRY4_D2_FACE_SIZE     = 28864;  // 1804 * 16 bytes
+    static constexpr float    COORD_VALID_MAX          = 25.0f;  // max coord in mm
 };
