@@ -47,6 +47,10 @@ target_link_libraries(DiamondConverter PRIVATE
     Qt6::OpenGLWidgets
 )
 
+if(WIN32)
+    target_link_libraries(DiamondConverter PRIVATE opengl32)
+endif()
+
 target_compile_definitions(DiamondConverter PRIVATE
     SEVENZIP_PATH="${SEVENZIP_EXECUTABLE}"
 )
