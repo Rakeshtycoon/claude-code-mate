@@ -607,18 +607,20 @@ void OX2ZParser::parseCT07Contours(const std::vector<uint8_t>& data,
         mmPoints.push_back(mm);
     }
 
-    // Build the radial profile r(z) by binning z-values and keeping the MAXIMUM
-    // radius (x) per bin.  The raw contour traces both the right and left sides of
-    // the silhouette at every height, so a naive "x >= 0" filter yields duplicate
-    // z-levels with two different radii — which produce two concentric shells when
-    // rotated.  Taking max(x) per z-bin gives a single clean outer envelope.
-    const int NUM_BINS = 600;
-    // z is normalised to [-1, +1]; bin index = (z + 1) / 2 * NUM_BINS
+    // Build the radial profile r(z).
+    // The CT07 contour traces 35 horizontal strip scans stacked top-to-bottom.
+    // Within each strip the path also covers transition paths near x≈0.
+    // Strategy:
+    //  1. Bin z into NUM_BINS and record max |x| per bin (outer envelope).
+    //  2. Smooth the result with a Gaussian window to eliminate the staircase
+    //     effect that produces "Christmas tree" rings.
+    //  3. Force tips (top & bottom few bins) toward zero radius.
+    const int NUM_BINS = 120;
     std::vector<float> maxRadiusPerBin(NUM_BINS, 0.0f);
 
     for (const auto& p : mmPoints) {
-        float absX = std::abs(p.x);          // radius = |x| (both sides)
-        float zNorm = p.z;                    // already in [-1, +1]
+        float absX = std::abs(p.x);
+        float zNorm = p.z;                    // in [-1, +1]
         int bin = static_cast<int>((zNorm + 1.0f) * 0.5f * NUM_BINS);
         if (bin < 0) bin = 0;
         if (bin >= NUM_BINS) bin = NUM_BINS - 1;
@@ -626,17 +628,60 @@ void OX2ZParser::parseCT07Contours(const std::vector<uint8_t>& data,
             maxRadiusPerBin[bin] = absX;
     }
 
-    // Convert bins back to Vec3 profile (radius, 0, z), skip empty bins
+    // Fill gaps (empty bins between non-zero bins) by linear interpolation
+    for (int b = 1; b < NUM_BINS - 1; ++b) {
+        if (maxRadiusPerBin[b] == 0.0f) {
+            // find next non-zero neighbour
+            int lo = b - 1, hi = b + 1;
+            while (hi < NUM_BINS && maxRadiusPerBin[hi] == 0.0f) ++hi;
+            if (hi < NUM_BINS && maxRadiusPerBin[lo] > 0.0f)
+                maxRadiusPerBin[b] = maxRadiusPerBin[lo] +
+                    (maxRadiusPerBin[hi] - maxRadiusPerBin[lo]) * float(b - lo) / float(hi - lo);
+        }
+    }
+
+    // Gaussian smoothing — window half-width = 8 bins
+    {
+        const int WIN = 8;
+        std::vector<float> smoothed(NUM_BINS, 0.0f);
+        for (int b = 0; b < NUM_BINS; ++b) {
+            if (maxRadiusPerBin[b] == 0.0f) continue;
+            float wsum = 0.0f, rsum = 0.0f;
+            for (int w = -WIN; w <= WIN; ++w) {
+                int idx = b + w;
+                if (idx < 0 || idx >= NUM_BINS || maxRadiusPerBin[idx] == 0.0f) continue;
+                float weight = std::exp(-0.5f * float(w * w) / float(WIN * WIN / 4));
+                rsum += maxRadiusPerBin[idx] * weight;
+                wsum += weight;
+            }
+            smoothed[b] = (wsum > 0.0f) ? rsum / wsum : 0.0f;
+        }
+        maxRadiusPerBin = smoothed;
+    }
+
+    // Taper the top and bottom 5% of bins toward zero (diamond tips)
+    {
+        int taper = NUM_BINS / 20;   // 5%
+        for (int b = 0; b < taper; ++b) {
+            float t = float(b) / float(taper);
+            maxRadiusPerBin[b]                *= t;
+            maxRadiusPerBin[NUM_BINS - 1 - b] *= t;
+        }
+    }
+
+    // Build Vec3 profile from bins
     std::vector<Vec3> profile;
-    profile.reserve(NUM_BINS);
+    profile.reserve(NUM_BINS + 2);
+    profile.push_back({0.0f, 0.0f, -1.0f});   // top tip
     for (int b = 0; b < NUM_BINS; ++b) {
         if (maxRadiusPerBin[b] > 0.0f) {
             float zNorm = ((float)b + 0.5f) / NUM_BINS * 2.0f - 1.0f;
             profile.push_back({maxRadiusPerBin[b], 0.0f, zNorm});
         }
     }
-    if (profile.size() < 3) return;
-    // Profile is already sorted by z (bin order = ascending z)
+    profile.push_back({0.0f, 0.0f, +1.0f});   // bottom tip
+    if (profile.size() < 4) return;
+
 
     if (progress) progress(92, "Building 3D mesh from contour profile...");
 
