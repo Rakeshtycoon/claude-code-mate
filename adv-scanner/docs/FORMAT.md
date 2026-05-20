@@ -119,28 +119,40 @@ Verified buffer details:
 - Extracting all vertex chunks and exporting them gives a clean point
   cloud of the rough-diamond surface (`adv-analyzer geometry --export`).
 
+**Face buffer** `[CONFIRMED]`: the geometry block holds a *single*
+triangle buffer of ~139,900 `[3][i0][i1][i2]` records (16 B each). It is
+recovered by a 16-byte walk that re-syncs (step 2 B) across ~10 short
+inter-run gaps that shift the byte alignment. With the full buffer the
+ratio **F = 2 V** holds exactly (139,900 faces / 69,964 vertices) and the
+face-index graph is a *single connected component* — i.e. this is the
+complete, closed rough-stone surface mesh. (An earlier 4-chunk reading
+caught only 76 k faces and looked fragmented; that was an artefact of the
+walker stopping at the alignment shifts.)
+
 **Vertex pool framing** `[CONFIRMED]`: the pool is preceded by a header
 whose last `uint32` is the vertex count (`69964` in the 564-A sample).
 The coordinates follow as **six contiguous f64-XYZ segments** joined by
-**exact 6-byte separators** (each separator drifts the byte alignment by
-−2). Segment sizes are exact multiples of 24 bytes — for 564-A:
-7257 / 14180 / 14179 / 14178 / 14179 / 5979 verts = 69,952 stored. This
-framing is now byte-proven (every boundary lands on a 24-byte multiple).
+**exact 6-byte separators**. Segment sizes are exact multiples of 24 B —
+for 564-A: 7257 / 14180 / 14179 / 14178 / 14179 / 5979 verts.
 
-**Surface mesh reconstruction** `[OPEN]` — *unresolved*: the `[3][i0][i1]
-[i2]` face chunks do **not** form a clean mesh against this vertex pool.
-Exhaustively tested: all six segment orderings, AoS vs SoA layouts, per-
-segment vs whole-buffer — every interpretation yields a crumpled mesh
-(median triangle edge 4–6 mm on a ~10 mm stone, i.e. faces connect non-
-adjacent vertices). The face-index graph is also fragmented (F/V ≈ 0.8–
-1.3, vs ≈2 for a closed surface; ~945 components). This points to an
-index-remap table or vertex numbering not derivable from the four sample
-files. The exported point cloud is valid; a **convex hull** of it gives a
-clean watertight approximate solid, but the exact original triangulation
-could not be recovered. Needs the vendor format spec or more samples.
+**Surface mesh reconstruction** `[OPEN]` — *partially solved*: the face
+buffer is complete and correct, but the vertex pool stores its
+coordinates **in a scrambled order**. Segment 0 is in mesh-index order
+(its faces reconstruct cleanly, 44 µm edges); **segments 1–5 are each
+internally permuted**. The permutation has no exploitable structure —
+ruled out: segment reordering, per-segment reversal, AoS/SoA, and
+reshape/transpose (grid de-interleave). A topology-propagation solver
+(walk the known faces out from the correct segment 0, disambiguating
+each new vertex by triangle orientation) places ~95–98 % of vertices but
+does not converge to a clean mesh — recovering a structureless ~62 k-
+element permutation from connectivity alone is an ill-posed combinatorial
+problem. The exact triangulation needs the vendor format spec (the vertex
+ordering key) or a sample whose vertex buffer is stored in mesh order.
+The exported point cloud is valid; its convex hull is a clean watertight
+*approximate* solid.
 
 Still `[OPEN]`:
-- Face↔vertex index correspondence (see above) — the main blocker.
+- Vertex-pool ordering key for segments 1–5 (see above) — the blocker.
 - **Inclusion geometry** `[STRONG]`: after the rough-stone mesh the body
   block carries a long series of **count-prefixed point records**
   (`[u32 count][count × 3×f64]`) — ~582 records / ~528k points spanning
