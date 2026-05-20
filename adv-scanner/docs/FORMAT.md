@@ -119,21 +119,28 @@ Verified buffer details:
 - Extracting all vertex chunks and exporting them gives a clean point
   cloud of the rough-diamond surface (`adv-analyzer geometry --export`).
 
-**Surface mesh reconstruction** `[STRONG]`: the body block stores the
-rough-stone mesh as a global f64 XYZ vertex pool followed by the u32
-triangle chunks. The pool is interrupted by short separators that drift
-the byte alignment off the 8-byte grid; recovering it as the
-concatenation of every f64 coordinate run (each trimmed to whole
-vertices) in the window before the faces yields a vertex array large
-enough for all triangle indices. The pool ends immediately before the
-faces, so the last *N* vertices (N = max index + 1) are the referenced
-set. `assemble_surface_mesh` / `adv-analyzer geometry --export-mesh`
-produce this mesh (OBJ/PLY/STL/GLB). It is **best-effort** — a few
-triangulation artefacts remain where a separator's exact length could
-not be pinned down.
+**Vertex pool framing** `[CONFIRMED]`: the pool is preceded by a header
+whose last `uint32` is the vertex count (`69964` in the 564-A sample).
+The coordinates follow as **six contiguous f64-XYZ segments** joined by
+**exact 6-byte separators** (each separator drifts the byte alignment by
+−2). Segment sizes are exact multiples of 24 bytes — for 564-A:
+7257 / 14180 / 14179 / 14178 / 14179 / 5979 verts = 69,952 stored. This
+framing is now byte-proven (every boundary lands on a 24-byte multiple).
+
+**Surface mesh reconstruction** `[OPEN]` — *unresolved*: the `[3][i0][i1]
+[i2]` face chunks do **not** form a clean mesh against this vertex pool.
+Exhaustively tested: all six segment orderings, AoS vs SoA layouts, per-
+segment vs whole-buffer — every interpretation yields a crumpled mesh
+(median triangle edge 4–6 mm on a ~10 mm stone, i.e. faces connect non-
+adjacent vertices). The face-index graph is also fragmented (F/V ≈ 0.8–
+1.3, vs ≈2 for a closed surface; ~945 components). This points to an
+index-remap table or vertex numbering not derivable from the four sample
+files. The exported point cloud is valid; a **convex hull** of it gives a
+clean watertight approximate solid, but the exact original triangulation
+could not be recovered. Needs the vendor format spec or more samples.
 
 Still `[OPEN]`:
-- Exact separator framing (would remove the residual mesh artefacts).
+- Face↔vertex index correspondence (see above) — the main blocker.
 - **Inclusion geometry** `[STRONG]`: after the rough-stone mesh the body
   block carries a long series of **count-prefixed point records**
   (`[u32 count][count × 3×f64]`) — ~582 records / ~528k points spanning
