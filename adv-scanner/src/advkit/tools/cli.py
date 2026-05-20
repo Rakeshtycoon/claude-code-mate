@@ -158,6 +158,12 @@ def cmd_geometry(args) -> int:
         export_point_cloud(cloud, args.export)
         print(f"  point cloud       {len(cloud)} vertices "
               f"-> {args.export}")
+    if args.export_mesh:
+        from advkit.mesh.bodyscan import export_surface_mesh
+        info = export_surface_mesh(adv.reader.buffer, body.start, body.end,
+                                   args.export_mesh)
+        print(f"  surface mesh      {info['vertices']} verts, "
+              f"{info['faces']} faces -> {args.export_mesh}")
     vb = geom.largest_vertex_buffer()
     fb = geom.largest_face_buffer()
     if vb:
@@ -329,6 +335,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--top", type=int, default=10)
     sp.add_argument("--export", help="write the vertex point cloud here "
                     "(.ply / .obj / .xyz)")
+    sp.add_argument("--export-mesh", help="assemble & write the surface "
+                    "triangle mesh here (.ply / .obj / .stl / .glb)")
     sp.add_argument("--denoise", action="store_true",
                     help="remove stray auxiliary geometry from the cloud")
     sp.add_argument("--json", help="write full JSON report here")

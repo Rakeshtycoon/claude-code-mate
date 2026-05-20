@@ -119,16 +119,28 @@ Verified buffer details:
 - Extracting all vertex chunks and exporting them gives a clean point
   cloud of the rough-diamond surface (`adv-analyzer geometry --export`).
 
-Still `[OPEN]`: the body block is a serialized **object graph** — vertex
-chunks are interspersed with face chunks and other records, not laid out
-as one `[verts][faces]` pair. So the detected vertex runs (~20k unique
-after dedup) account for fewer vertices than the faces index. Decoding
-the per-object framing (object headers, vertex/face pairing) is the
-remaining work needed to reassemble the full watertight mesh and to
-isolate the individual inclusion sub-meshes (shown green by the planner).
+**Surface mesh reconstruction** `[STRONG]`: the body block stores the
+rough-stone mesh as a global f64 XYZ vertex pool followed by the u32
+triangle chunks. The pool is interrupted by short separators that drift
+the byte alignment off the 8-byte grid; recovering it as the
+concatenation of every f64 coordinate run (each trimmed to whole
+vertices) in the window before the faces yields a vertex array large
+enough for all triangle indices. The pool ends immediately before the
+faces, so the last *N* vertices (N = max index + 1) are the referenced
+set. `assemble_surface_mesh` / `adv-analyzer geometry --export-mesh`
+produce this mesh (OBJ/PLY/STL/GLB). It is **best-effort** — a few
+triangulation artefacts remain where a separator's exact length could
+not be pinned down.
 
-`adv-analyzer geometry` reports/exports every vertex/face buffer it can
-verify; `adv-analyzer discover` continues probing the raster regions.
+Still `[OPEN]`:
+- Exact separator framing (would remove the residual mesh artefacts).
+- Isolating the individual **inclusion** sub-meshes (the green objects in
+  the planner) from the rough-stone mesh — the body block is a multi-
+  object scene and at least one object class uses a different vertex
+  record layout.
+
+`adv-analyzer geometry` reports/exports vertex clouds and the surface
+mesh; `adv-analyzer discover` continues probing the raster regions.
 
 ## 6. Reverse-engineering assumptions
 

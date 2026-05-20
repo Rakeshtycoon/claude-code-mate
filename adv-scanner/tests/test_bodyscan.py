@@ -74,6 +74,21 @@ def test_scan_body_geometry_combines_and_serialises():
     json.dumps(geom.as_dict())
 
 
+def test_assemble_surface_mesh():
+    from advkit.mesh.bodyscan import assemble_surface_mesh
+
+    # vertex pool (2400 verts) followed by a 1600-triangle face chunk
+    pool = _vertex_buffer(2400)
+    faces = _face_buffer(1600, max_index=2400)
+    blob = b"\xff" * 64 + pool + b"\xff" * 8 + faces
+    verts, tris = assemble_surface_mesh(blob, 0, len(blob))
+    assert verts.shape[1] == 3
+    assert tris.shape[1] == 3
+    assert len(tris) > 0
+    # every face index must be valid for the returned vertex array
+    assert tris.max() < len(verts)
+
+
 def test_extract_and_export_point_cloud(tmp_path):
     from advkit.mesh.bodyscan import export_point_cloud, extract_point_cloud
 

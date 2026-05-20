@@ -253,6 +253,108 @@ def extract_point_cloud(buf, start: int, end: int,
     return cloud
 
 
+def _walk_faces(buf, start: int, end: int, max_index: int = 200000):
+    """Walk every 16-byte ``[3][i0][i1][i2]`` triangle; return (faces, first
+    face offset). Tolerates the 14-byte chunk separators by re-syncing."""
+    import numpy as np
+
+    faces = []
+    first = None
+    o = start
+    while o + 16 <= end:
+        if (_u32(buf, o) == _TRIANGLE_TAG and _u32(buf, o + 4) < max_index
+                and _u32(buf, o + 8) < max_index
+                and _u32(buf, o + 12) < max_index):
+            s = o
+            chunk = []
+            while o + 16 <= end and _u32(buf, o) == _TRIANGLE_TAG:
+                a, b, c = _u32(buf, o + 4), _u32(buf, o + 8), _u32(buf, o + 12)
+                if max(a, b, c) >= max_index:
+                    break
+                chunk.append((a, b, c))
+                o += 16
+            if len(chunk) >= 1500:
+                if first is None:
+                    first = s
+                faces.extend(chunk)
+            else:
+                o = s + 4
+        else:
+            o += 4
+    return np.array(faces, dtype=np.int64), first
+
+
+def assemble_surface_mesh(buf, start: int, end: int,
+                          vertex_window: int = 2_600_000):
+    """Reconstruct the rough-diamond surface mesh from the body block.
+
+    Strategy (see ``docs/FORMAT.md`` §5): the body block stores the mesh as
+    a global ``float64`` XYZ vertex pool followed by ``uint32`` triangle
+    chunks. The pool is interrupted by short separators that drift byte
+    alignment, so it is recovered as the concatenation of every f64
+    coordinate run (each trimmed to whole vertices) in the
+    ``vertex_window`` bytes preceding the first triangle chunk. The pool
+    ends immediately before the faces, so the *last* ``N`` vertices (with
+    ``N`` = max triangle index + 1) are the ones the faces reference.
+
+    Returns ``(vertices, faces)`` as numpy arrays. Best-effort: the result
+    may contain triangulation artefacts where a separator could not be
+    located exactly.
+    """
+    import numpy as np
+
+    faces, first_face = _walk_faces(buf, start, end)
+    if first_face is None or len(faces) == 0:
+        return np.empty((0, 3)), np.empty((0, 3), dtype=np.int64)
+
+    order = np.sort(faces.ravel())
+    nverts = int(order[int(len(order) * 0.999)]) + 1  # robust to separator junk
+
+    # Collect every f64 coordinate run in the window before the faces, at
+    # ANY byte alignment (separators drift the alignment off the 8-byte
+    # grid). Each run is trimmed to a whole number of vertices.
+    region = bytes(buf[max(start, first_face - vertex_window):first_face])
+    base = max(start, first_face - vertex_window)
+    coords: list[float] = []
+    pos = 0
+    limit = len(region)
+    while pos < limit - 8:
+        n = 0
+        while pos + n * 8 + 8 <= limit and _is_coordinate(
+                struct.unpack_from("<d", region, pos + n * 8)[0]):
+            n += 1
+        if n >= 60:
+            m = (n // 3) * 3
+            coords.extend(struct.unpack_from(f"<{m}d", region, pos))
+            pos += n * 8
+        else:
+            pos += 1
+    pool = np.array(coords[:len(coords) // 3 * 3]).reshape(-1, 3)
+    _ = base  # window base retained for clarity / future absolute offsets
+    if len(pool) < nverts:
+        return pool, faces[(faces < len(pool)).all(axis=1)]
+
+    vertices = pool[-nverts:]
+    faces = faces[(faces < nverts).all(axis=1)]
+    _log.info("assembled surface mesh: %d vertices, %d faces",
+              len(vertices), len(faces))
+    return vertices, faces
+
+
+def export_surface_mesh(buf, start: int, end: int, path: str) -> dict:
+    """Assemble the body-block surface mesh and export it (PLY/OBJ/STL/GLB)."""
+    import trimesh
+
+    vertices, faces = assemble_surface_mesh(buf, start, end)
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=True)
+    mesh.update_faces(mesh.nondegenerate_faces())
+    mesh.remove_unreferenced_vertices()
+    mesh.export(path)
+    _log.info("exported surface mesh -> %s", path)
+    return {"vertices": len(mesh.vertices), "faces": len(mesh.faces),
+            "watertight": bool(mesh.is_watertight)}
+
+
 def export_point_cloud(cloud, path: str) -> None:
     """Write an ``(N, 3)`` point cloud to PLY / OBJ / XYZ."""
     import numpy as np
