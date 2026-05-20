@@ -72,3 +72,20 @@ def test_scan_body_geometry_combines_and_serialises():
     assert geom.largest_vertex_buffer().vertex_count == 600
     assert geom.largest_face_buffer().triangle_count == 150
     json.dumps(geom.as_dict())
+
+
+def test_extract_and_export_point_cloud(tmp_path):
+    from advkit.mesh.bodyscan import export_point_cloud, extract_point_cloud
+
+    # two vertex buffers, the second a duplicate of the first
+    vb = _vertex_buffer(1500)
+    blob = b"\xff" * 16 + vb + b"\xff" * 16 + vb
+    cloud = extract_point_cloud(blob, 0, len(blob), min_vertices=1000, dedup=True)
+    # 1500 distinct vertices, duplicate copy removed
+    assert cloud.shape[1] == 3
+    assert len(cloud) == len(set(map(tuple, cloud)))
+
+    for ext in ("ply", "obj", "xyz"):
+        path = tmp_path / f"cloud.{ext}"
+        export_point_cloud(cloud, str(path))
+        assert path.is_file() and path.stat().st_size > 0

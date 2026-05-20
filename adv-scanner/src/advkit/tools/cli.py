@@ -135,7 +135,11 @@ def cmd_discover(args) -> int:
 
 
 def cmd_geometry(args) -> int:
-    from advkit.mesh.bodyscan import scan_body_geometry
+    from advkit.mesh.bodyscan import (
+        export_point_cloud,
+        extract_point_cloud,
+        scan_body_geometry,
+    )
 
     adv = _open(args.file)
     body = adv.section("header+body") or adv.sections[0]
@@ -147,6 +151,11 @@ def cmd_geometry(args) -> int:
           f"(total {geom.total_vertices} float64 XYZ vertices)")
     print(f"  face buffers      {len(geom.face_buffers)}  "
           f"(total {geom.total_triangles} triangles)")
+    if args.export:
+        cloud = extract_point_cloud(adv.reader.buffer, body.start, body.end)
+        export_point_cloud(cloud, args.export)
+        print(f"  point cloud       {len(cloud)} unique vertices "
+              f"-> {args.export}")
     vb = geom.largest_vertex_buffer()
     fb = geom.largest_face_buffer()
     if vb:
@@ -316,6 +325,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--min-vertices", type=int, default=256)
     sp.add_argument("--min-triangles", type=int, default=64)
     sp.add_argument("--top", type=int, default=10)
+    sp.add_argument("--export", help="write the vertex point cloud here "
+                    "(.ply / .obj / .xyz)")
     sp.add_argument("--json", help="write full JSON report here")
     sp.set_defaults(func=cmd_geometry)
 

@@ -59,19 +59,24 @@ The header also contains a run of mixed u32 fields (counts, dimensions,
 and several large values in the 0.5–32 M range that look like internal
 offsets) — see `[OPEN]` below.
 
-## 3. Internal X-ray slices `[CONFIRMED]`
+## 3. Internal X-ray images `[CONFIRMED]`
 
 - **300** baseline JPEG streams, **1024×1280, 1 component (grayscale)** —
   the count is identical in every sample.
 - Stored back-to-back with **no padding** between them.
-- These are the internal scan images described in the business brief
-  ("~300 X-ray slices"). Standard JFIF — the embedded Huffman/quantisation
-  tables are the textbook tables, which is what first revealed the file
-  contains JPEGs.
+- **These are rotational X-ray projections, not CT cross-sections.**
+  Inspecting slices 0/60/120/.../299 shows the *same* stone on a spindle
+  at successive rotation angles (its silhouette rotates); the vendor
+  videos confirm this is the 2D image the planner scrolls through.
+  → Naively stacking them into a Z-volume is **not** geometrically valid;
+  a true 3D volume needs tomographic reconstruction (filtered
+  back-projection). `advkit.volume` still stacks them as a quick
+  visual/QA aid, but that volume is explicitly approximate.
+- Standard JFIF — the embedded Huffman/quantisation tables are the
+  textbook tables, which is what first revealed the file contains JPEGs.
 - Damaged slices occur in real data (e.g. index 32 / index 28 in two
   samples) — they fail to decode. The parser flags them
-  (`AdvFile.damaged_slices`) and the volume builder interpolates from
-  neighbours instead of crashing.
+  (`AdvFile.damaged_slices`).
 
 ## 4. Preview thumbnails `[STRONG]`
 
@@ -104,14 +109,26 @@ data. Identified buffer types:
 - **Raster regions** `[OPEN]` — ~1024-wide 16-bit areas (entropy ~5–6,
   30–55 % zeros) — candidate depth maps or a voxel slab.
 
-Still `[OPEN]`: the precise per-object framing (object headers, exact
-vertex/face counts, which vertex buffer pairs with which face buffer).
-The detected `float64` vertex runs are fragmented and currently account
-for fewer vertices than the face indices reference — so vertices are
-either chunked or interleaved with per-object records not yet decoded.
+Verified buffer details:
 
-`adv-analyzer geometry` reports every vertex/face buffer it can verify;
-`adv-analyzer discover` continues probing the raster regions.
+- **Face chunks** are fixed runs of ~13,492 (or ~21,267) triangles,
+  separated by 14-byte records; `[3][i0][i1][i2]` u32, 16 B each. Face
+  indices reach ~70,000 → the rough-stone mesh has ~70k vertices.
+- **Vertex chunks** are blocks of f64 XYZ (e.g. 8,995 verts ≈ 215,880 B).
+  The geometry is stored **twice** in the body block.
+- Extracting all vertex chunks and exporting them gives a clean point
+  cloud of the rough-diamond surface (`adv-analyzer geometry --export`).
+
+Still `[OPEN]`: the body block is a serialized **object graph** — vertex
+chunks are interspersed with face chunks and other records, not laid out
+as one `[verts][faces]` pair. So the detected vertex runs (~20k unique
+after dedup) account for fewer vertices than the faces index. Decoding
+the per-object framing (object headers, vertex/face pairing) is the
+remaining work needed to reassemble the full watertight mesh and to
+isolate the individual inclusion sub-meshes (shown green by the planner).
+
+`adv-analyzer geometry` reports/exports every vertex/face buffer it can
+verify; `adv-analyzer discover` continues probing the raster regions.
 
 ## 6. Reverse-engineering assumptions
 

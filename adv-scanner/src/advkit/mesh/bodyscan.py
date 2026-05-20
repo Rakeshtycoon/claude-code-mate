@@ -198,3 +198,52 @@ def scan_body_geometry(buf, start: int, end: int,
         face_buffers=scan_face_buffers(buf, start, end,
                                        min_triangles=min_triangles),
     )
+
+
+def extract_point_cloud(buf, start: int, end: int,
+                        min_vertices: int = 1000,
+                        dedup: bool = True):
+    """Extract every body-block vertex buffer as a single ``(N, 3)`` array.
+
+    This is the most reliable geometry the body block yields: the laser
+    scan's surface vertices as float64 XYZ. The container often stores the
+    geometry twice, so ``dedup`` drops exact duplicate points.
+
+    Returns a numpy ``float64`` array (requires numpy).
+    """
+    import numpy as np
+
+    buffers = scan_vertex_buffers(buf, start, end, min_vertices)
+    chunks = []
+    for vb in buffers:
+        raw = bytes(buf[vb.offset:vb.offset + vb.vertex_count * 24])
+        chunks.append(np.frombuffer(raw, dtype="<f8").reshape(-1, 3))
+    if not chunks:
+        return np.empty((0, 3), dtype=np.float64)
+    cloud = np.vstack(chunks)
+    if dedup:
+        cloud = np.unique(cloud, axis=0)
+    _log.info("extracted point cloud: %d vertices from %d buffer(s)",
+              len(cloud), len(buffers))
+    return cloud
+
+
+def export_point_cloud(cloud, path: str) -> None:
+    """Write an ``(N, 3)`` point cloud to PLY / OBJ / XYZ."""
+    import numpy as np
+    import trimesh
+
+    ext = path.rsplit(".", 1)[-1].lower()
+    if ext == "xyz":
+        np.savetxt(path, cloud, fmt="%.6f")
+    elif ext == "obj":
+        with open(path, "w", encoding="ascii") as fh:
+            fh.write("# advkit body-block vertex cloud\n")
+            for v in cloud:
+                fh.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+    elif ext == "ply":
+        trimesh.PointCloud(cloud).export(path)
+    else:
+        raise ValueError(f"unsupported point-cloud format: .{ext} "
+                         f"(use ply, obj, xyz)")
+    _log.info("exported point cloud -> %s", path)
