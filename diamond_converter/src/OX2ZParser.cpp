@@ -64,9 +64,16 @@ bool OX2ZParser::extractOX2Z(const std::string& ox2zPath, std::string& extracted
         // Directory might already exist, try to use it
     }
 
-    // Build 7z command
-    std::string cmd = std::string(SEVENZIP_PATH) + " e \"" + ox2zPath +
+    // Build 7z command - properly quoted for Windows paths with spaces
+    std::string sevenzip = std::string(SEVENZIP_PATH);
+#ifdef _WIN32
+    // Windows: outer quotes needed when executable path has spaces; redirect to NUL
+    std::string cmd = "\"\"" + sevenzip + "\" e \"" + ox2zPath +
+                      "\" -o\"" + tmpDir + "\" -y > NUL 2>&1\"";
+#else
+    std::string cmd = "\"" + sevenzip + "\" e \"" + ox2zPath +
                       "\" -o\"" + tmpDir + "\" -y > /dev/null 2>&1";
+#endif
 
     int ret = std::system(cmd.c_str());
     if (ret != 0) {
