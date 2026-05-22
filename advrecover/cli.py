@@ -113,6 +113,31 @@ def cmd_chunks(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- survey ------------------------------------------------------------------
+def cmd_survey(args: argparse.Namespace) -> int:
+    """Structural comparison table across a directory of .adv files."""
+    files = sorted(f for f in os.listdir(args.directory)
+                   if f.lower().endswith(".adv"))
+    if not files:
+        _log(f"no .adv files in {args.directory}")
+        return 1
+    _log(f"{'file':<20}{'size':>12} {'stone_id':<20}{'plan':<9}"
+         f"{'elem':>6}{'saw':>5}{'pie':>5}{'prev':>6}")
+    for name in files:
+        try:
+            doc = parse_file(os.path.join(args.directory, name))
+            mm = doc.main_model
+            tree = mm.planning_tree if mm else []
+            saws = sum(1 for t in tree if t.lower().startswith("saw"))
+            pies = sum(1 for t in tree if t.lower().startswith("pie"))
+            _log(f"{name:<20}{doc.file_size:>12,} "
+                 f"{(mm.stone_id if mm else ''):<20}{(mm.plan_code if mm else ''):<9}"
+                 f"{len(tree):>6}{saws:>5}{pies:>5}{len(doc.previews):>6}")
+        except Exception as exc:  # noqa: BLE001
+            _log(f"{name:<20}  ERROR: {exc}")
+    return 0
+
+
 # -- diff --------------------------------------------------------------------
 def cmd_diff(args: argparse.Namespace) -> int:
     from .re_tools.diff import common_prefix, diff_regions
@@ -265,6 +290,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=40)
     p.add_argument("--compare", help="second .adv file for differential analysis")
     p.set_defaults(func=cmd_chunks)
+
+    p = sub.add_parser("survey", help="structural comparison across a directory")
+    p.add_argument("directory")
+    p.set_defaults(func=cmd_survey)
 
     p = sub.add_parser("diff", help="binary diff of two files")
     p.add_argument("file_a")

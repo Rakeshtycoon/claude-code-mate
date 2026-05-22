@@ -95,7 +95,7 @@ The string table further down enumerates the planning operations:
 * `Pie<n>-<m>` — **pieces** (planned polished stones)
 * `Mea` — measurement
 
-## 5. Geometry encoding — VERIFIED
+## 5. Geometry encoding — VERIFIED (across 20 sample files)
 
 Plainly-stored geometry is a contiguous list of **contour records**:
 
@@ -105,71 +105,71 @@ repeat:
     float32  xyz[point_count * 3]      coordinate unit = microns
 ```
 
-The `u32 point_count` sits immediately before each point block (its
-denormal float value is what naturally delimits the runs). ~45 such records
-exist per file, ~360–375 points each.
+The `u32 point_count` sits immediately before each point block. ~45 such
+records exist per file, ~360–375 points each.
 
-**Important — verified by PCA:** every contour record is **planar**, and all
-records share a *single common plane* (thin-axis extent ≈ 8 µm versus ≈ 8 mm
-in-plane). They are a **2-D auxiliary dataset** (a cross-section / saw
-diagram), **not** the 3-D rough surface.
+**Verified by PCA + SHA-256 comparison across 20 files:**
 
-A full-section scan in both float32 and float64 finds **zero** volumetric
-(non-planar) point arrays. The 3-D rough body, planned polished stones and
-saw planes are therefore **not** stored as plain floating-point data — they
-live in the block described in §6.
+* Every contour record is **planar**; all records share a single common
+  plane (thin-axis extent ≈ 8 µm vs ≈ 8 mm in-plane).
+* The contour bytes are **identical across completely different stones** —
+  e.g. `978`≡`985`, `330-3826`≡`330-3830`, `967`≡`330-3858`,
+  `330-3820`≡`330-4332` all hash-match. There are only a handful of
+  distinct variants.
 
-The recovered planar contours are still real, exported geometry; they are
-labelled as 2-D auxiliary contours, not presented as the rough surface.
+Therefore the contour block is a **shared cut-template library** (a standard
+facet/cross-section diagram selected per cut type) — it is **not** per-stone
+geometry. A full-section scan in float32 *and* float64 finds **zero**
+volumetric point arrays. The real rough/polished/plane meshes are not stored
+as plain floating-point data; they are in the encoded regions of §6.
 
 ## 6. File block map — VERIFIED by entropy segmentation
 
 The main-model section is **not** one monolithic block. Fine-grained entropy
-segmentation (`advrecover segment`) reveals a consistent, reproducible
-layout across both samples. Offsets below are for `f7864efb-967.adv`;
-`b8968c0b-978.adv` differs only in block sizes, not in the pattern.
+segmentation (`advrecover segment`) reveals a consistent layout across all
+sampled files. Offsets below are for `967.adv`; other files keep the
+pattern and differ only in block sizes.
 
 | Range | Size | Entropy | Block kind | Decodable? |
 |-------|------|---------|------------|------------|
 | `0x000000–0x00E000` | 57 KB | ~3.0 | header / metadata / strings | **yes** — done |
-| `0x010000–0x0B0000` | 640 KB | ~7.99 | **`CRL` block** | no — compressed/encrypted |
-| `0x0B0000–0x2B0000` | 2.0 MB | ~6.28 | **plain float32 geometry** | **yes** — the 45 planar contours |
-| `0x2C0000–0xC00000` | ~9.7 MB | ~7.97 | large compressed block | no — compressed/encrypted |
+| `0x010000–0x0B0000` | 640 KB | ~7.99 | high-entropy block A | no — encoded |
+| `0x0B0000–0x2B0000` | 2.0 MB | ~6.28 | plain float32 contour template | **yes** — decoded |
+| `0x2C0000–0xC00000` | ~9.7 MB | ~7.97 | large high-entropy block | no — encoded |
 | `0xC00000–0xC60000` | 393 KB | ~5.7 | structured (planning tree) | partly — strings |
-| `0xC60000–0xCA0000` | 262 KB | ~7.99 | compressed block | no |
-| `0xCA0000–0x18B0000` | ~12 MB | 7.2–7.6 | alternating **dense** / **structured** chunks | partial — see below |
+| `0xCA0000–0x18B0000` | ~12 MB | 7.2–7.6 | ~350 per-element chunks | partial — §6a |
 | `0x18B0000–EOF` | ~0.7 MB | mixed | trailing data + zero padding | partial |
 
-Key facts established about the high-entropy regions:
+**Encrypted or compressed? — answered by a uniformity test.** Reference:
+true-random / encrypted data scores chi² ≈ 258 (a byte histogram of 256
+bins). Measured on `967.adv`:
 
-* The `CRL` block and the ~9.7 MB block sit at entropy ≈ 7.99 (theoretical
-  max), uniform, with no framing — **proprietary compression or encryption**.
-* They contain **no** embedded JPEG/PNG and are **not** framed zlib/gzip.
-* The `0xCA0000–0x18B0000` region has a *periodic* ~24–44 KB chunk structure
-  alternating "dense" (≈ 7.5) and "structured" (≈ 7.0) sub-blocks — most
-  likely **per-element compressed geometry** (the file has ~430 `Saw`/`Pie`
-  planning elements). This is the **best secondary RE target**: the
-  "structured" sub-blocks may carry decodable per-element headers/transforms.
+| Region | entropy | chi² | serial-corr | verdict |
+|--------|---------|------|-------------|---------|
+| `0x010000` block | 7.995 | 3,780 | +0.03 | **not encrypted** — structured |
+| `0x2C0000` 9.7 MB block | 7.985 | 92,824 | +0.00 | **not encrypted** — structured |
+| per-element chunk body | 7.496 | 115,424 | **+0.28** | **not encrypted** — raw structured data |
 
-**Confidence-ranked geometry targets** (from `advrecover segment --ranked`):
+The high-entropy blocks are therefore **not encrypted** and **not** framed
+with any standard codec (zlib/gzip/bz2/lzma/lz4/zstd all fail at every
+offset). They are a **proprietary encoding** — most likely an arithmetic/
+range-coded stream or packed scan imagery (the per-element body's +0.28
+serial correlation rules out both compression and encryption).
 
-1. `0x0B0000–0x2B0000` — confidence 0.90 — plain float contours *(decoded)*.
-2. `0xCA0000–0x18B0000` "structured" sub-blocks — confidence ~0.25 — likely
-   per-element headers; needs chunk-boundary RE.
-3. `CRL` + 9.7 MB blocks — confidence ~0.08 — compressed; needs the decoder.
+> The `"CRL"` bytes noted in an earlier revision were a **coincidence** —
+> present in only 9 of 18 files, at random offsets. Not a magic number.
 
-Conclusion: the true 3-D rough/polished/plane meshes live in the compressed
-blocks. Decoding them realistically requires the Advisor application/DLLs
-(to observe the decompressor) or a large sample corpus for differential
-analysis. The toolkit's `segment` / `probe` / `diff` commands are built to
-make exactly that work fast once those inputs are available.
+Conclusion: the true 3-D meshes live in the proprietary-encoded regions.
+Decoding them realistically requires the Advisor application/DLLs to observe
+the decoder. Sample-only analysis has now been pushed to its limit: 20 files
+pinned the structure precisely but cannot reveal the codec itself.
 
 ## 6a. Per-element chunk table — PARTIALLY DECODED
 
 The `0xCA0000–0x18B0000` region is a table of per-element records, one per
 `Saw`/`Pie` planning element. `advrecover chunks` segments it:
 
-* **347 chunks** in `f7864efb-967.adv`, **137** in `b8968c0b-978.adv`
+* **347 chunks** in `967.adv`, **137** in `978.adv`
   (~33–39 KB median) — consistent with the ~430 / ~309 planning elements.
 * Each chunk = a **low-entropy header** (~2–4 KB) + a **high-entropy
   compressed body** (entropy ≈ 7.5).

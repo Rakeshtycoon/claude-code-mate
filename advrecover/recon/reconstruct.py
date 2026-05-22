@@ -63,8 +63,9 @@ def reconstruct(
         f"{len(all_points):,} points (units: {unit})"
     )
     result.notes.append(
-        "note: these contours are a 2-D auxiliary dataset; the true 3-D model "
-        "lives in the opaque packed block (see docs/ADV_FORMAT.md sec 6)"
+        "note: these planar contours are a shared cut-template (byte-identical "
+        "across different stones); the true 3-D model is in the encoded regions "
+        "(see docs/ADV_FORMAT.md sec 6)"
     )
 
     if keep_contours:
