@@ -46,6 +46,7 @@ python -m advrecover info     stone.adv          # parsed container structure
 python -m advrecover tree     stone.adv          # structure as a tree
 python -m advrecover probe    stone.adv          # reverse-engineering diagnostics
 python -m advrecover segment  stone.adv --ranked # entropy block map, geometry-ranked
+python -m advrecover chunks   stone.adv          # per-element chunk table
 python -m advrecover diff     a.adv b.adv        # binary diff of two files
 python -m advrecover extract  stone.adv --out extracted     # previews + metadata
 python -m advrecover export   stone.adv --out out --method marching_cubes

@@ -96,6 +96,23 @@ def cmd_segment(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- chunks ------------------------------------------------------------------
+def cmd_chunks(args: argparse.Namespace) -> int:
+    from .re_tools.chunks import chunk_table, compare_chunk_tables, render_chunk_table
+
+    with open(args.file, "rb") as fh:
+        data = fh.read()
+    table = chunk_table(data, region_start=args.start)
+    if args.compare:
+        with open(args.compare, "rb") as fh:
+            other = chunk_table(fh.read(), region_start=args.start)
+        for line in compare_chunk_tables(table, other):
+            _log(line)
+    else:
+        _log(render_chunk_table(table, limit=args.limit))
+    return 0
+
+
 # -- diff --------------------------------------------------------------------
 def cmd_diff(args: argparse.Namespace) -> int:
     from .re_tools.diff import common_prefix, diff_regions
@@ -240,6 +257,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ranked", action="store_true",
                    help="rank segments by geometry confidence instead of file order")
     p.set_defaults(func=cmd_segment)
+
+    p = sub.add_parser("chunks", help="parse the per-element chunk table")
+    p.add_argument("file")
+    p.add_argument("--start", type=lambda x: int(x, 0), default=0xCA0000,
+                   help="region start offset (default 0xCA0000)")
+    p.add_argument("--limit", type=int, default=40)
+    p.add_argument("--compare", help="second .adv file for differential analysis")
+    p.set_defaults(func=cmd_chunks)
 
     p = sub.add_parser("diff", help="binary diff of two files")
     p.add_argument("file_a")

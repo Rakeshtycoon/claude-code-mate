@@ -164,12 +164,30 @@ blocks. Decoding them realistically requires the Advisor application/DLLs
 analysis. The toolkit's `segment` / `probe` / `diff` commands are built to
 make exactly that work fast once those inputs are available.
 
+## 6a. Per-element chunk table — PARTIALLY DECODED
+
+The `0xCA0000–0x18B0000` region is a table of per-element records, one per
+`Saw`/`Pie` planning element. `advrecover chunks` segments it:
+
+* **347 chunks** in `f7864efb-967.adv`, **137** in `b8968c0b-978.adv`
+  (~33–39 KB median) — consistent with the ~430 / ~309 planning elements.
+* Each chunk = a **low-entropy header** (~2–4 KB) + a **high-entropy
+  compressed body** (entropy ≈ 7.5).
+* Region-level chunk headers were observed to contain meaningful constants:
+  `3.14159` (π), `0.785398` (π/4) and `±1.0` doubles — i.e. **rotation /
+  orientation parameters** for the planned element.
+* The compressed bodies still need the decoder (§7.1).
+
+`advrecover chunks <a> --compare <b>` performs differential analysis across
+two files — the tool to run first when more samples arrive.
+
 ## 7. Open questions (next RE iterations)
 
 1. **Decode the `CRL` block and the 9.7 MB block** — identify the
    compression/encryption (best done by tracing the Advisor decoder).
-2. RE the periodic chunk structure in `0xCA0000–0x18B0000`; extract
-   per-element headers and any transform matrices.
+2. Pin the exact per-element header layout (§6a) and decode the π/angle
+   fields into full transform matrices; precisely align the ~347 chunks to
+   the named `Saw`/`Pie` planning elements.
 3. Meaning / role of the single common plane shared by all contour records.
 4. Plane equations for `Saw` planes (normal + offset).
 5. Inclusion / internal-feature records.
