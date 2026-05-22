@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Packaging the Windows .exe
+pyinstaller>=6.0
+
+# Tooling
+pytest>=7.4
+ruff>=0.1

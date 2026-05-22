@@ -1,0 +1,17 @@
+# Core
+numpy>=1.24
+
+# 3D reconstruction
+scipy>=1.10
+scikit-image>=0.21        # marching cubes
+trimesh>=4.0              # mesh utilities + OBJ/STL helpers
+
+# Viewer / GUI (Qt)
+PySide6>=6.5
+pyvista>=0.43             # VTK-based 3D rendering
+pyvistaqt>=0.11           # PyVista <-> Qt bridge
+
+# Media (video-to-data correlation, embedded preview decoding)
+imageio>=2.31
+imageio-ffmpeg>=0.4
+Pillow>=10.0

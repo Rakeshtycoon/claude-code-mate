@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adv-planning-data-recovery"
+version = "0.1.0"
+description = "Reverse-engineering converter and 3D viewer for OctoNus Advisor .ADV diamond planning files"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[project.scripts]
+advrecover = "advrecover.cli:main"
+
+[tool.setuptools]
+packages = ["advrecover"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
