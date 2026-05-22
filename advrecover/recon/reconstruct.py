@@ -59,8 +59,12 @@ def reconstruct(
     result.point_cloud = all_points
     unit = "mm" if scale_to_mm else "micron"
     result.notes.append(
-        f"recovered {len(arrays)} geometry arrays, "
+        f"recovered {len(arrays)} planar contour records, "
         f"{len(all_points):,} points (units: {unit})"
+    )
+    result.notes.append(
+        "note: these contours are a 2-D auxiliary dataset; the true 3-D model "
+        "lives in the opaque packed block (see docs/ADV_FORMAT.md sec 6)"
     )
 
     if keep_contours:
@@ -74,10 +78,10 @@ def reconstruct(
         return result
 
     if method == "hull":
-        result.meshes.append(convex_hull(all_points, name="rough_envelope"))
+        result.meshes.append(convex_hull(all_points, name="contour_hull"))
     elif method == "marching_cubes":
         result.meshes.append(
-            marching_cubes_surface(all_points, name="rough_surface")
+            marching_cubes_surface(all_points, name="contour_surface")
         )
     elif method == "clustered_hull":
         result.meshes.extend(_clustered_hulls(arrays, factor))

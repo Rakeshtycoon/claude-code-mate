@@ -97,36 +97,63 @@ The string table further down enumerates the planning operations:
 
 ## 5. Geometry encoding — VERIFIED
 
-Geometry is stored as **float32 XYZ arrays**, coordinate unit = **microns**
-(observed range ≈ 7,000–10,000 µm, i.e. a 7–10 mm stone).
+Plainly-stored geometry is a contiguous list of **contour records**:
 
-The rough diamond is **not** a triangle soup with an index buffer (no large
-`u32` index runs exist). It is stored as **stacked cross-section contours** —
-ordered polylines of ~360–375 points each. Surface reconstruction is
-therefore a contour-lofting / marching-cubes problem, not a direct mesh load.
+```
+repeat:
+    u32      point_count
+    float32  xyz[point_count * 3]      coordinate unit = microns
+```
 
-## 6. High-entropy block — VERIFIED location, UNKNOWN content
+The `u32 point_count` sits immediately before each point block (its
+denormal float value is what naturally delimits the runs). ~45 such records
+exist per file, ~360–375 points each.
 
-Within the main-model section there is a large (~8 MB in the 28 MB sample)
-contiguous block at entropy ≈ 7.98 bits/byte. Established by probing:
+**Important — verified by PCA:** every contour record is **planar**, and all
+records share a *single common plane* (thin-axis extent ≈ 8 µm versus ≈ 8 mm
+in-plane). They are a **2-D auxiliary dataset** (a cross-section / saw
+diagram), **not** the 3-D rough surface.
 
-* It contains **no** embedded JPEG or PNG images.
-* It is **not** a framed zlib stream (zlib byte pairs occur only at chance
-  frequency and do not decompress).
-* Entropy 7.98 is too uniform for plain float32 coordinate data (~7.5).
+A full-section scan in both float32 and float64 finds **zero** volumetric
+(non-planar) point arrays. The 3-D rough body, planned polished stones and
+saw planes are therefore **not** stored as plain floating-point data — they
+live in the block described in §6.
 
-Working hypothesis: a proprietary packed or compressed representation of the
-scan data (photographic scan volume or quantised high-resolution mesh). The
-recovered float32 contour geometry (~18 k points) is independent of this
-block and reconstructs a usable model without it. Decoding this block is the
-single highest-value next RE target — use `advrecover probe`.
+The recovered planar contours are still real, exported geometry; they are
+labelled as 2-D auxiliary contours, not presented as the rough surface.
+
+## 6. The opaque block — VERIFIED location, UNDECODED content
+
+The bulk of the main-model section — roughly **26 MB** of the 28 MB sample,
+spanning ≈ `0x10000` to ≈ `0x19B0000` — is a high-entropy block at
+≈ 8.0 bits/byte. This block holds the 3-D model (see §5). Established by
+probing:
+
+* Entropy ≈ 8.0 — at the theoretical maximum; uniform across the whole span.
+* **No** embedded JPEG or PNG images.
+* **Not** a framed zlib/gzip stream — zlib byte pairs occur only at chance
+  frequency and do not decompress.
+* No periodic record framing, size table or chunk markers were found.
+* A short ASCII marker `"CRL"` appears at the block start (`0x10000`).
+
+Entropy this high and this uniform, with no decodable framing, is consistent
+with either a **proprietary compression** scheme or **encryption**. From only
+two sample files this block is **not decodable** — doing so realistically
+requires the Advisor application/SDK (to observe the decoder) or a much
+larger corpus of samples for differential analysis.
+
+Consequence: a reconstruction that pixel-matches the original viewport
+cannot be produced from the plain data alone. The **200+ embedded JPEG
+previews** (section 4) are themselves rendered views of the planning model
+and are the pragmatic source for showing the visualisation today.
 
 ## 7. Open questions (next RE iterations)
 
-1. Decode the ~8 MB high-entropy block (see section 6).
-2. Exact field that links a contour run to a `Saw`/`Pie`/rough element.
-3. Polished-stone facet geometry vs. rough scan contours — separate encoding?
-4. Plane equations for saw planes (normal + offset) vs. contour outlines.
+1. **Decode the opaque ~26 MB block (§6)** — the only route to the true 3-D
+   model. Best attacked with the Advisor application/SDK or many samples.
+2. Identify the `"CRL"` marker at `0x10000` and any block sub-structure.
+3. Meaning / role of the single common plane shared by all contour records.
+4. Plane equations for `Saw` planes (normal + offset).
 5. Inclusion / internal-feature records.
 6. Meaning of `const_a` / `const_b` (61809 / 2359 — constant across samples).
 
