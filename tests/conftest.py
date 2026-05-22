@@ -35,7 +35,15 @@ def build_synthetic_adv(stone_id: str = "330-001(GA)(WH)", run_count: int = 5,
     for text in (stone_id, "DV", "P77-XX", "Accurate",
                  "11111111-2222-3333-4444-555555555555"):
         section += _string(text)
-    for name in ("Saw1-1", "Pie3-1", "Saw3-1"):
+    # Proper 60-byte planning-element records, each followed by its name.
+    for eid, (offset, normal, name) in enumerate([
+        (1000.0, (0.0, 0.0, 1.0), "Saw1-1"),
+        (-500.0, (0.6, 0.0, 0.8), "Pie3-1"),
+        (250.0, (0.0, 1.0, 0.0), "Saw3-1"),
+    ]):
+        section += struct.pack("<II", 86, eid)
+        section += struct.pack("<6d", 54.0, offset, 0.0, *normal)
+        section += struct.pack("<I", 1)
         section += _string(name)
 
     # Pad to a 4-byte boundary so the float32 geometry stays word-aligned

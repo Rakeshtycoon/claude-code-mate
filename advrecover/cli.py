@@ -219,6 +219,43 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- planning ----------------------------------------------------------------
+def cmd_planning(args: argparse.Namespace) -> int:
+    from .export import write_obj, write_stl
+    from .recon.planning import list_solutions, reconstruct_planning
+
+    doc = parse_file(args.file)
+    with open(args.file, "rb") as fh:
+        data = fh.read()
+
+    if args.list:
+        solutions = list_solutions(data, doc)
+        _log(f"{len(solutions)} planning solution(s):")
+        for sid, count in sorted(solutions.items(), key=lambda kv: -kv[1]):
+            _log(f"  solution {sid:>5}: {count} elements")
+        return 0
+
+    result = reconstruct_planning(data, doc, solution=args.solution,
+                                  plane_size_mm=args.size)
+    for note in result.notes:
+        _log(f"  {note}")
+    if not result.meshes:
+        return 1
+
+    os.makedirs(args.out, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(args.file))[0]
+    suffix = f"_sol{args.solution}" if args.solution else "_planning"
+    if args.format in ("obj", "both"):
+        obj = os.path.join(args.out, stem + suffix + ".obj")
+        write_obj(result, obj)
+        _log(f"wrote {obj}")
+    if args.format in ("stl", "both"):
+        stl = os.path.join(args.out, stem + suffix + ".stl")
+        write_stl(result, stl)
+        _log(f"wrote {stl}")
+    return 0
+
+
 # -- batch -------------------------------------------------------------------
 def cmd_batch(args: argparse.Namespace) -> int:
     files = [f for f in sorted(os.listdir(args.directory))
@@ -318,6 +355,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-contours", action="store_true")
     p.add_argument("--point-cloud", action="store_true", help="include raw points")
     p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("planning",
+                       help="parametric reconstruction: saw planes + planned stones")
+    p.add_argument("file")
+    p.add_argument("--out", default="out")
+    p.add_argument("--format", choices=["obj", "stl", "both"], default="obj")
+    p.add_argument("--solution", help="render only one planning solution (see --list)")
+    p.add_argument("--size", type=float, default=7.0, help="plane quad size in mm")
+    p.add_argument("--list", action="store_true", help="list planning solutions and exit")
+    p.set_defaults(func=cmd_planning)
 
     p = sub.add_parser("batch", help="batch convert a directory of .adv files")
     p.add_argument("directory")

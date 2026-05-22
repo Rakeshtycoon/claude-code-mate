@@ -181,15 +181,43 @@ The `0xCA0000–0x18B0000` region is a table of per-element records, one per
 `advrecover chunks <a> --compare <b>` performs differential analysis across
 two files — the tool to run first when more samples arrive.
 
+## 6b. Planning-element records — DECODED (Path B)
+
+Each `Saw` / `Pie` planning element name in the planning tree is **preceded
+by a fixed 60-byte record** (verified across the 20-file sample set):
+
+```
+offset  type     field
++0x00   u32      tag           84 / 85 / 86 for active records
++0x04   u32      element_id    sequential id
++0x08   f64      fixed         constant ~54.0 (reference angle / reserved)
++0x10   f64      offset        signed plane offset, in microns (±~3200)
++0x18   f64      reserved      constant 0.0
++0x20   f64[3]   normal        unit normal vector  (VERIFIED |n| == 1.0)
++0x38   u32      marker        == 1
++0x3C   u32      name_len      MFC string length, then the name bytes
+```
+
+This is enough for a **parametric reconstruction without the codec**: a
+`Saw` element is the cutting plane `normal · x == offset`; a `Pie` element
+is a planned stone's orientation + position. Element names group into
+planning *solutions* (`Saw133-1` → solution `133`).
+
+`advrecover planning` builds and exports this: each element becomes a plane
+quad, optionally filtered to one solution (`--solution 133`). It produces
+real OBJ/STL geometry traced entirely to decoded records — the rough
+*scanned* surface still needs the §6 codec, but the cut planning is
+recovered.
+
 ## 7. Open questions (next RE iterations)
 
-1. **Decode the `CRL` block and the 9.7 MB block** — identify the
-   compression/encryption (best done by tracing the Advisor decoder).
-2. Pin the exact per-element header layout (§6a) and decode the π/angle
-   fields into full transform matrices; precisely align the ~347 chunks to
-   the named `Saw`/`Pie` planning elements.
-3. Meaning / role of the single common plane shared by all contour records.
-4. Plane equations for `Saw` planes (normal + offset).
+1. **Decode the high-entropy blocks (§6)** — the scanned rough/polished
+   meshes; needs the Advisor decoder (the data is *not* encrypted, so this
+   is tractable with the DLLs).
+2. Confirm the meaning of the `fixed` (≈54.0) field and whether `offset` is
+   a distance from origin or along another datum.
+3. Align the ~347 per-element chunks (§6a) to the named elements (§6b).
+4. Meaning / role of the single common plane shared by all contour records.
 5. Inclusion / internal-feature records.
 6. Meaning of `const_a` / `const_b` (61809 / 2359 — constant across samples).
 

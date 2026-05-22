@@ -51,6 +51,8 @@ python -m advrecover survey   ./samples          # structural comparison of many
 python -m advrecover diff     a.adv b.adv        # binary diff of two files
 python -m advrecover extract  stone.adv --out extracted     # previews + metadata
 python -m advrecover export   stone.adv --out out --method marching_cubes
+python -m advrecover planning stone.adv --list             # list planning solutions
+python -m advrecover planning stone.adv --solution 133     # OBJ of one solution
 python -m advrecover batch    ./samples --out out           # batch conversion
 python -m advrecover gui      stone.adv          # desktop viewer
 ```
