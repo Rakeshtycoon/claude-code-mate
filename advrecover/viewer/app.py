@@ -1,13 +1,12 @@
-"""PySide6 desktop application — the ``.ADV`` planning viewer.
+"""PySide6 + PyVista desktop application.
 
-Layout:
-  * left dock   — parsed structure tree
-  * centre      — PyVista 3D viewport (orbit / zoom / pan)
-  * right dock  — layer toggles, render options, reverse-engineering panel
-  * bottom dock — logging console
+The window is built lazily (``_build_window_class``) so importing this
+module never requires PySide6/pyvistaqt — only :func:`launch` does.
 
-The heavy lifting (parse + reconstruct) is delegated to the same core
-modules the CLI uses; this file is purely presentation + wiring.
+Features: solution browser, layer toggles, orbit/pan/zoom camera with
+fit-to-scene and orthographic mode, point picking with a coordinate
+read-out, a transparency slider, plane-normal visualisation, a
+reconstructed-vs-inferred debug mode, OBJ/STL export and batch conversion.
 """
 from __future__ import annotations
 
@@ -15,36 +14,28 @@ import os
 import sys
 import traceback
 
+import numpy as np
+
 from ..export import write_obj, write_stl
 from ..format import parse_file
 from ..format.constants import guid_name
-from ..recon import METHODS, reconstruct
-from .scene import classify_layer, mesh_to_polydata, points_to_polydata, polyline_to_polydata
-
-_LAYER_LABELS = {
-    "rough": "Rough diamond",
-    "polished": "Planned polished stones",
-    "saw_planes": "Saw / cutting planes",
-    "contours": "Raw contours",
-    "point_cloud": "Point cloud",
-    "axes": "Coordinate axes",
-}
-_LAYER_COLOURS = {
-    "rough": (0.78, 0.62, 0.66),
-    "polished": (0.95, 0.85, 0.30),
-    "saw_planes": (0.30, 0.80, 0.45),
-    "contours": (0.20, 0.45, 0.85),
-    "point_cloud": (0.55, 0.55, 0.60),
-}
+from ..recon import METHODS
+from ..recon.mesh import ReconResult
+from ..recon.planning import list_solutions, reconstruct_planning
+from .scene import (
+    build_scene,
+    mesh_to_polydata,
+    points_to_polydata,
+    polyline_to_polydata,
+)
 
 
 def launch(path: str | None = None) -> int:
-    """Create the Qt application, show the main window and run the loop."""
+    """Create the Qt application, show the window and run the event loop."""
     from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication(sys.argv)
-    window_cls = _build_window_class()
-    window = window_cls()
+    window = _build_window_class()()
     window.show()
     if path:
         window.load_file(path)
@@ -52,18 +43,21 @@ def launch(path: str | None = None) -> int:
 
 
 def _build_window_class():
-    """Build the MainWindow class lazily so importing this module is cheap."""
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
         QCheckBox,
         QComboBox,
         QDockWidget,
+        QDoubleSpinBox,
         QFileDialog,
         QGroupBox,
         QLabel,
+        QListWidget,
         QMainWindow,
         QPlainTextEdit,
         QPushButton,
+        QSlider,
+        QTabWidget,
         QTreeWidget,
         QTreeWidgetItem,
         QVBoxLayout,
@@ -75,82 +69,128 @@ def _build_window_class():
         def __init__(self) -> None:
             super().__init__()
             self.setWindowTitle("ADV Planning Data Recovery")
-            self.resize(1400, 900)
+            self.resize(1500, 940)
 
             self.document = None
-            self.recon = None
             self.raw_data = b""
+            self.scene = None
+            self.current_solution: str | None = None
             self._actors: dict[str, list] = {}
             self._wireframe = False
+            self._ortho = False
 
             self.plotter = QtInteractor(self)
-            self.setCentralWidget(self.plotter.interactor)
+            self.setCentralWidget(self.plotter)
             self.plotter.set_background("white")
             self.plotter.add_axes()
 
             self._build_menu()
-            self._build_tree_dock()
-            self._build_control_dock()
+            self._build_left_dock()
+            self._build_right_dock()
             self._build_log_dock()
-            self.log("Ready. Open a .ADV file to begin.")
+            self.log("Ready — File ▸ Open a .ADV file to begin.")
 
-        # -- UI construction ------------------------------------------------
+        # -- construction --------------------------------------------------
         def _build_menu(self) -> None:
             file_menu = self.menuBar().addMenu("&File")
-            file_menu.addAction("&Open .ADV...", self._on_open)
+            file_menu.addAction("&Open .ADV…", self._on_open)
             file_menu.addSeparator()
-            file_menu.addAction("Export &OBJ...", lambda: self._on_export("obj"))
-            file_menu.addAction("Export &STL...", lambda: self._on_export("stl"))
+            file_menu.addAction("Export &OBJ…", lambda: self._export("obj"))
+            file_menu.addAction("Export &STL…", lambda: self._export("stl"))
+            file_menu.addAction("&Batch convert folder…", self._batch)
             file_menu.addSeparator()
             file_menu.addAction("E&xit", self.close)
 
             view_menu = self.menuBar().addMenu("&View")
-            view_menu.addAction("Reset camera", lambda: self.plotter.reset_camera())
+            view_menu.addAction("Fit to scene", self._fit)
+            view_menu.addAction("Toggle orthographic", self._toggle_ortho)
             view_menu.addAction("Toggle wireframe", self._toggle_wireframe)
+            view_menu.addAction("Reset camera", lambda: self.plotter.reset_camera())
 
-        def _build_tree_dock(self) -> None:
+        def _build_left_dock(self) -> None:
+            tabs = QTabWidget()
+
             self.tree = QTreeWidget()
             self.tree.setHeaderLabels(["Structure", "Detail"])
-            dock = QDockWidget("Parsed structure", self)
-            dock.setWidget(self.tree)
+            tabs.addTab(self.tree, "Structure")
+
+            self.solution_list = QListWidget()
+            self.solution_list.itemSelectionChanged.connect(self._on_solution_changed)
+            tabs.addTab(self.solution_list, "Solutions")
+
+            dock = QDockWidget("Document", self)
+            dock.setWidget(tabs)
             self.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
-        def _build_control_dock(self) -> None:
+        def _build_right_dock(self) -> None:
             panel = QWidget()
             layout = QVBoxLayout(panel)
 
-            layers_box = QGroupBox("Layers")
-            layers_layout = QVBoxLayout(layers_box)
+            # Layers
+            box = QGroupBox("Layers")
+            box_layout = QVBoxLayout(box)
             self.layer_checks: dict[str, QCheckBox] = {}
-            for key, label in _LAYER_LABELS.items():
+            for key, label in (
+                ("rough_body", "Rough body (proxy)"),
+                ("cutting_planes", "Cutting planes"),
+                ("planned_stones", "Planned stones"),
+                ("inclusions", "Inclusion markers"),
+                ("bounding_box", "Bounding box"),
+                ("contours", "Contour template"),
+                ("point_cloud", "Point cloud"),
+                ("axes", "Coordinate axes"),
+            ):
                 check = QCheckBox(label)
-                check.setChecked(key != "point_cloud")
-                check.stateChanged.connect(self._apply_layer_visibility)
-                layers_layout.addWidget(check)
+                check.setChecked(key not in ("bounding_box", "contours", "point_cloud"))
+                check.stateChanged.connect(self._apply_visibility)
+                box_layout.addWidget(check)
                 self.layer_checks[key] = check
-            layout.addWidget(layers_box)
+            layout.addWidget(box)
 
-            recon_box = QGroupBox("Reconstruction")
-            recon_layout = QVBoxLayout(recon_box)
+            # Appearance
+            box = QGroupBox("Appearance")
+            box_layout = QVBoxLayout(box)
+            box_layout.addWidget(QLabel("Transparency"))
+            self.transparency = QSlider(Qt.Horizontal)
+            self.transparency.setRange(0, 100)
+            self.transparency.setValue(40)
+            self.transparency.valueChanged.connect(self._apply_appearance)
+            box_layout.addWidget(self.transparency)
+            self.show_normals = QCheckBox("Show plane normals")
+            self.show_normals.stateChanged.connect(self._render)
+            box_layout.addWidget(self.show_normals)
+            self.debug_mode = QCheckBox("Debug: highlight inferred geometry")
+            self.debug_mode.stateChanged.connect(self._render)
+            box_layout.addWidget(self.debug_mode)
+            layout.addWidget(box)
+
+            # Reconstruction
+            box = QGroupBox("Reconstruction")
+            box_layout = QVBoxLayout(box)
+            box_layout.addWidget(QLabel("Rough-proxy method"))
             self.method_combo = QComboBox()
-            self.method_combo.addItems(list(METHODS))
-            self.method_combo.setCurrentText("marching_cubes")
-            recon_layout.addWidget(QLabel("Surface method:"))
-            recon_layout.addWidget(self.method_combo)
-            rebuild = QPushButton("Rebuild geometry")
+            self.method_combo.addItems([m for m in METHODS if m != "pointcloud"])
+            box_layout.addWidget(self.method_combo)
+            box_layout.addWidget(QLabel("Plane size (mm)"))
+            self.plane_size = QDoubleSpinBox()
+            self.plane_size.setRange(1.0, 30.0)
+            self.plane_size.setValue(7.0)
+            box_layout.addWidget(self.plane_size)
+            rebuild = QPushButton("Rebuild scene")
             rebuild.clicked.connect(self._rebuild)
-            recon_layout.addWidget(rebuild)
-            wire = QPushButton("Toggle wireframe")
-            wire.clicked.connect(self._toggle_wireframe)
-            recon_layout.addWidget(wire)
-            layout.addWidget(recon_box)
+            box_layout.addWidget(rebuild)
+            layout.addWidget(box)
 
-            diag_box = QGroupBox("RE diagnostics")
-            diag_layout = QVBoxLayout(diag_box)
-            self.diag_text = QPlainTextEdit()
-            self.diag_text.setReadOnly(True)
-            diag_layout.addWidget(self.diag_text)
-            layout.addWidget(diag_box)
+            # Inspector
+            box = QGroupBox("Inspector")
+            box_layout = QVBoxLayout(box)
+            self.inspector = QPlainTextEdit()
+            self.inspector.setReadOnly(True)
+            self.inspector.setMaximumHeight(150)
+            self.inspector.setPlainText("Click geometry to inspect.")
+            box_layout.addWidget(self.inspector)
+            layout.addWidget(box)
+            layout.addStretch(1)
 
             dock = QDockWidget("Controls", self)
             dock.setWidget(panel)
@@ -159,40 +199,47 @@ def _build_window_class():
         def _build_log_dock(self) -> None:
             self.console = QPlainTextEdit()
             self.console.setReadOnly(True)
-            self.console.setMaximumBlockCount(2000)
+            self.console.setMaximumBlockCount(4000)
             dock = QDockWidget("Log", self)
             dock.setWidget(self.console)
             self.addDockWidget(Qt.BottomDockWidgetArea, dock)
 
-        # -- helpers --------------------------------------------------------
+        # -- helpers -------------------------------------------------------
         def log(self, message: str) -> None:
             self.console.appendPlainText(message)
 
         def _on_open(self) -> None:
             path, _ = QFileDialog.getOpenFileName(
-                self, "Open .ADV file", "", "Advisor files (*.adv *.ADV);;All files (*)"
-            )
+                self, "Open .ADV file", "",
+                "Advisor files (*.adv *.ADV);;All files (*)")
             if path:
                 self.load_file(path)
 
         def load_file(self, path: str) -> None:
             from PySide6.QtWidgets import QApplication
 
-            QApplication.setOverrideCursor(Qt.WaitCursor)
+            QApplication.setOverrideCursor(self._wait_cursor())
             try:
-                self.log(f"Parsing {path} ...")
+                self.log(f"Parsing {path} …")
                 self.document = parse_file(path)
                 with open(path, "rb") as fh:
                     self.raw_data = fh.read()
                 self._populate_tree()
-                self._populate_diagnostics()
+                self._populate_solutions()
+                self.current_solution = None
                 self._rebuild()
-                self.setWindowTitle(f"ADV Planning Data Recovery - {os.path.basename(path)}")
+                self.setWindowTitle(
+                    f"ADV Planning Data Recovery — {os.path.basename(path)}")
             except Exception as exc:  # noqa: BLE001
                 self.log(f"ERROR: {exc}")
                 self.log(traceback.format_exc())
             finally:
                 QApplication.restoreOverrideCursor()
+
+        @staticmethod
+        def _wait_cursor():
+            from PySide6.QtCore import Qt as _Qt
+            return _Qt.WaitCursor
 
         def _populate_tree(self) -> None:
             self.tree.clear()
@@ -203,107 +250,160 @@ def _build_window_class():
             self.tree.addTopLevelItem(root)
             for sec in doc.sections:
                 node = QTreeWidgetItem(
-                    [f"section[{sec.section_id}] {sec.role}", f"{sec.size:,} B"]
-                )
+                    [f"section[{sec.section_id}] {sec.role}", f"{sec.size:,} B"])
                 node.addChild(QTreeWidgetItem(["guid", guid_name(sec.guid)]))
                 if sec.section_id == 1 and doc.main_model:
                     mm = doc.main_model
-                    meta = QTreeWidgetItem(["metadata", mm.stone_id])
-                    for label, value in (
-                        ("plan code", mm.plan_code), ("scan mode", mm.scan_mode),
-                        ("created", str(mm.created)), ("uuid", mm.document_uuid),
-                    ):
-                        meta.addChild(QTreeWidgetItem([label, value]))
-                    node.addChild(meta)
-                    tree_node = QTreeWidgetItem(
-                        ["planning tree", f"{len(mm.planning_tree)} elements"]
-                    )
-                    for elem in mm.planning_tree:
-                        tree_node.addChild(QTreeWidgetItem([elem, ""]))
-                    node.addChild(tree_node)
-                if sec.section_id == 4:
-                    node.addChild(QTreeWidgetItem(
-                        ["previews", f"{len(doc.previews)} JPEG(s)"]))
+                    for label, value in (("stone id", mm.stone_id),
+                                          ("plan code", mm.plan_code),
+                                          ("scan mode", mm.scan_mode),
+                                          ("created", str(mm.created))):
+                        node.addChild(QTreeWidgetItem([label, value]))
                 root.addChild(node)
             root.setExpanded(True)
 
-        def _populate_diagnostics(self) -> None:
-            doc = self.document
-            if doc is None:
+        def _populate_solutions(self) -> None:
+            self.solution_list.clear()
+            self.solution_list.addItem("(all solutions)")
+            if self.document is None:
                 return
-            lines = [
-                f"file size : {doc.file_size:,} bytes",
-                f"sections  : {len(doc.sections)}",
-                f"previews  : {len(doc.previews)}",
-                f"warnings  : {len(doc.warnings)}",
-            ]
-            lines += [f"  ! {w}" for w in doc.warnings]
-            for block in doc.unknown_blocks:
-                lines.append(f"unknown @0x{block.offset:x} ({block.size} B) {block.note}")
-            self.diag_text.setPlainText("\n".join(lines))
+            solutions = list_solutions(self.raw_data, self.document)
+            for sid, count in sorted(solutions.items(),
+                                     key=lambda kv: (-kv[1], kv[0])):
+                self.solution_list.addItem(f"solution {sid}  ({count} elements)")
 
+        def _on_solution_changed(self) -> None:
+            items = self.solution_list.selectedItems()
+            if not items:
+                return
+            text = items[0].text()
+            self.current_solution = (None if text.startswith("(all")
+                                     else text.split()[1])
+            self._rebuild()
+
+        # -- scene build / render -----------------------------------------
         def _rebuild(self) -> None:
             if self.document is None:
                 return
-            method = self.method_combo.currentText()
-            self.log(f"Reconstructing geometry (method: {method}) ...")
+            from PySide6.QtWidgets import QApplication
+
+            QApplication.setOverrideCursor(self._wait_cursor())
             try:
-                self.recon = reconstruct(self.raw_data, self.document, method=method)
+                self.log(f"Building scene (solution: "
+                         f"{self.current_solution or 'all'}) …")
+                self.scene = build_scene(
+                    self.raw_data, self.document,
+                    solution=self.current_solution,
+                    geometry_method=self.method_combo.currentText(),
+                    plane_size_mm=self.plane_size.value())
+                for note in self.scene.notes:
+                    self.log(f"  {note}")
+                self._render()
             except Exception as exc:  # noqa: BLE001
-                self.log(f"ERROR during reconstruction: {exc}")
-                return
-            for note in self.recon.notes:
-                self.log(f"  {note}")
-            self._render()
+                self.log(f"ERROR building scene: {exc}")
+                self.log(traceback.format_exc())
+            finally:
+                QApplication.restoreOverrideCursor()
 
         def _render(self) -> None:
             self.plotter.clear()
             self.plotter.add_axes()
-            self._actors = {key: [] for key in _LAYER_LABELS}
-            if self.recon is None:
+            self._actors = {}
+            if self.scene is None:
                 return
+            opacity = 1.0 - self.transparency.value() / 100.0
+            debug = self.debug_mode.isChecked()
 
-            for mesh in self.recon.meshes:
-                if mesh.is_empty:
+            for layer in self.scene.layers:
+                if layer.key == "axes" or layer.is_empty:
                     continue
-                layer = classify_layer(mesh.name)
-                actor = self.plotter.add_mesh(
-                    mesh_to_polydata(mesh),
-                    color=_LAYER_COLOURS.get(layer, (0.7, 0.7, 0.7)),
-                    opacity=0.4 if layer == "rough" else 0.85,
-                    show_edges=True,
-                    name=mesh.name,
-                )
-                self._actors[layer].append(actor)
+                actors: list = []
+                color = (1.0, 0.0, 1.0) if (debug and layer.inferred) else layer.color
+                layer_opacity = opacity if layer.kind == "surface" else 1.0
 
-            for poly in self.recon.contours:
-                pd = polyline_to_polydata(poly)
-                if pd.n_points == 0:
-                    continue
-                actor = self.plotter.add_mesh(
-                    pd, color=_LAYER_COLOURS["contours"], line_width=1, name=poly.name
-                )
-                self._actors["contours"].append(actor)
+                for mesh in layer.meshes:
+                    if mesh.is_empty:
+                        continue
+                    actors.append(self.plotter.add_mesh(
+                        mesh_to_polydata(mesh), color=color,
+                        opacity=layer_opacity if layer.key != "rough_body" else opacity,
+                        style="wireframe" if self._wireframe else "surface",
+                        show_edges=layer.kind == "surface", name=mesh.name))
+                for line in layer.lines:
+                    pd = polyline_to_polydata(line)
+                    if pd.n_points:
+                        actors.append(self.plotter.add_mesh(
+                            pd, color=color, line_width=2, name=line.name))
+                if layer.points is not None and len(layer.points):
+                    actors.append(self.plotter.add_mesh(
+                        points_to_polydata(layer.points), color=color,
+                        point_size=2, name=f"{layer.key}_pts"))
+                self._actors[layer.key] = actors
 
-            if len(self.recon.point_cloud):
-                actor = self.plotter.add_mesh(
-                    points_to_polydata(self.recon.point_cloud),
-                    color=_LAYER_COLOURS["point_cloud"], point_size=2,
-                    render_points_as_spheres=False, name="point_cloud",
-                )
-                self._actors["point_cloud"].append(actor)
-
+            if self.show_normals.isChecked():
+                self._add_plane_normals()
+            self._enable_picking()
             self.plotter.reset_camera()
-            self._apply_layer_visibility()
+            self._apply_visibility()
             self.log("Render complete.")
 
-        def _apply_layer_visibility(self) -> None:
-            for key, check in self.layer_checks.items():
-                if key == "axes":
+        def _add_plane_normals(self) -> None:
+            """Draw an arrow at each cutting-plane centre along its normal."""
+            layer = self.scene.layer("cutting_planes") if self.scene else None
+            if layer is None:
+                return
+            centres, directions = [], []
+            for mesh in layer.meshes:
+                if mesh.is_empty:
                     continue
+                tri = mesh.vertices[mesh.faces[0]]
+                n = np.cross(tri[1] - tri[0], tri[2] - tri[0])
+                norm = np.linalg.norm(n)
+                if norm > 0:
+                    centres.append(mesh.vertices.mean(axis=0))
+                    directions.append(n / norm)
+            if centres:
+                try:
+                    self.plotter.add_arrows(np.array(centres), np.array(directions),
+                                            mag=2.0, color="red", name="normals")
+                except Exception:  # noqa: BLE001
+                    pass
+
+        def _enable_picking(self) -> None:
+            try:
+                self.plotter.enable_point_picking(
+                    callback=self._on_pick, show_message=False,
+                    show_point=True, use_picker=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+        def _on_pick(self, point, *args) -> None:
+            if point is None or self.scene is None:
+                return
+            p = np.asarray(point)
+            lines = [f"Picked point: ({p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}) mm"]
+            dims = self.scene.dimensions
+            if dims is not None:
+                lines.append(f"Scene size: {dims[0]:.2f} × {dims[1]:.2f} "
+                             f"× {dims[2]:.2f} mm")
+            self.inspector.setPlainText("\n".join(lines))
+
+        # -- toggles -------------------------------------------------------
+        def _apply_visibility(self) -> None:
+            for key, check in self.layer_checks.items():
                 visible = check.isChecked()
                 for actor in self._actors.get(key, []):
                     actor.SetVisibility(visible)
+            self.plotter.render()
+
+        def _apply_appearance(self) -> None:
+            opacity = 1.0 - self.transparency.value() / 100.0
+            for key in ("rough_body", "cutting_planes", "planned_stones"):
+                for actor in self._actors.get(key, []):
+                    try:
+                        actor.GetProperty().SetOpacity(opacity)
+                    except AttributeError:
+                        pass
             self.plotter.render()
 
         def _toggle_wireframe(self) -> None:
@@ -312,30 +412,86 @@ def _build_window_class():
                 for actor in actors:
                     try:
                         prop = actor.GetProperty()
-                        prop.SetRepresentationToWireframe() if self._wireframe \
-                            else prop.SetRepresentationToSurface()
+                        (prop.SetRepresentationToWireframe if self._wireframe
+                         else prop.SetRepresentationToSurface)()
                     except AttributeError:
                         pass
             self.plotter.render()
             self.log(f"Wireframe {'on' if self._wireframe else 'off'}.")
 
-        def _on_export(self, fmt: str) -> None:
-            if self.recon is None:
+        def _toggle_ortho(self) -> None:
+            self._ortho = not self._ortho
+            try:
+                if self._ortho:
+                    self.plotter.enable_parallel_projection()
+                else:
+                    self.plotter.disable_parallel_projection()
+            except Exception:  # noqa: BLE001
+                pass
+            self.log(f"Projection: {'orthographic' if self._ortho else 'perspective'}.")
+
+        def _fit(self) -> None:
+            self.plotter.reset_camera()
+            self.plotter.render()
+
+        # -- export --------------------------------------------------------
+        def _scene_result(self) -> ReconResult:
+            """Collect the visible scene into a single ReconResult for export."""
+            result = ReconResult()
+            if self.scene is None:
+                return result
+            for layer in self.scene.layers:
+                if not self.layer_checks[layer.key].isChecked():
+                    continue
+                result.meshes.extend(m for m in layer.meshes if not m.is_empty)
+                result.contours.extend(layer.lines)
+            return result
+
+        def _export(self, fmt: str) -> None:
+            if self.scene is None:
                 self.log("Nothing to export — open a file first.")
                 return
             ext = "obj" if fmt == "obj" else "stl"
             path, _ = QFileDialog.getSaveFileName(
-                self, f"Export {ext.upper()}", "", f"{ext.upper()} (*.{ext})"
-            )
+                self, f"Export {ext.upper()}", "", f"{ext.upper()} (*.{ext})")
             if not path:
                 return
             try:
+                result = self._scene_result()
                 if fmt == "obj":
-                    write_obj(self.recon, path)
+                    write_obj(result, path)
                 else:
-                    write_stl(self.recon, path)
+                    write_stl(result, path)
                 self.log(f"Exported {path}")
             except Exception as exc:  # noqa: BLE001
                 self.log(f"ERROR exporting: {exc}")
+
+        def _batch(self) -> None:
+            directory = QFileDialog.getExistingDirectory(
+                self, "Select folder of .ADV files")
+            if not directory:
+                return
+            out = os.path.join(directory, "advrecover_out")
+            os.makedirs(out, exist_ok=True)
+            files = [f for f in sorted(os.listdir(directory))
+                     if f.lower().endswith(".adv")]
+            self.log(f"Batch: {len(files)} file(s) → {out}")
+            ok = 0
+            for name in files:
+                try:
+                    doc = parse_file(os.path.join(directory, name))
+                    with open(os.path.join(directory, name), "rb") as fh:
+                        data = fh.read()
+                    result = reconstruct_planning(data, doc)
+                    stem = os.path.splitext(name)[0]
+                    write_obj(result, os.path.join(out, stem + ".obj"))
+                    write_stl(result, os.path.join(out, stem + ".stl"))
+                    self.log(f"  ✓ {name}")
+                    ok += 1
+                except Exception as exc:  # noqa: BLE001
+                    self.log(f"  ✗ {name}: {exc}")
+            self.log(f"Batch complete: {ok}/{len(files)} succeeded. Report in {out}")
+            with open(os.path.join(out, "report.txt"), "w", encoding="utf-8") as fh:
+                fh.write(f"advrecover batch report\n{ok}/{len(files)} succeeded\n")
 
     return MainWindow
