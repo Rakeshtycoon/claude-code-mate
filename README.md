@@ -84,10 +84,11 @@ pyinstaller packaging/advrecover.spec
 ```
 advrecover/
   binio/      structured binary reader, GUID, hexdump      (format-agnostic)
-  format/     .ADV container: header, directory, sections, main-model header
-  recon/      geometry scanner, contour handling, mesh reconstruction
+  format/     .ADV container + planning-element record decoding
+  recon/      geometry scanner, mesh reconstruction, planning reconstruction
+  gem/        parametric brilliant-cut gemstone generator
   export/     OBJ / STL / MTL writers with object grouping
-  re_tools/   reverse-engineering diagnostics: probe, binary diff
+  re_tools/   reverse-engineering diagnostics: probe, segment, chunks, diff
   viewer/     PySide6 + PyVista desktop application
   cli.py      command-line entry point (also drives batch mode)
 ```

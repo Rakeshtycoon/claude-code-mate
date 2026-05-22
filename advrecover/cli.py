@@ -236,7 +236,9 @@ def cmd_planning(args: argparse.Namespace) -> int:
         return 0
 
     result = reconstruct_planning(data, doc, solution=args.solution,
-                                  plane_size_mm=args.size)
+                                  plane_size_mm=args.size,
+                                  stone_solids=not args.proxy_planes,
+                                  stone_diameter_mm=args.stone_diameter)
     for note in result.notes:
         _log(f"  {note}")
     if not result.meshes:
@@ -363,6 +365,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=["obj", "stl", "both"], default="obj")
     p.add_argument("--solution", help="render only one planning solution (see --list)")
     p.add_argument("--size", type=float, default=7.0, help="plane quad size in mm")
+    p.add_argument("--stone-diameter", type=float, default=3.0,
+                   help="planned-stone diameter in mm (size is not decoded)")
+    p.add_argument("--proxy-planes", action="store_true",
+                   help="render planned stones as flat planes, not brilliant solids")
     p.add_argument("--list", action="store_true", help="list planning solutions and exit")
     p.set_defaults(func=cmd_planning)
 

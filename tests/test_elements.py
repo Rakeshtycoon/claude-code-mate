@@ -31,14 +31,26 @@ def test_element_solution_grouping(synthetic_adv_bytes):
     assert list_solutions(synthetic_adv_bytes, doc) == {"1": 1, "3": 2}
 
 
-def test_reconstruct_planning_builds_planes(synthetic_adv_bytes):
+def test_reconstruct_planning_proxy_planes(synthetic_adv_bytes):
     doc = parse_bytes(synthetic_adv_bytes)
-    result = reconstruct_planning(synthetic_adv_bytes, doc, plane_size_mm=7.0)
+    result = reconstruct_planning(synthetic_adv_bytes, doc, plane_size_mm=7.0,
+                                  stone_solids=False)
     assert len(result.meshes) == 3
     assert len(result.contours) == 3
     for mesh in result.meshes:
-        assert mesh.faces.shape == (2, 3)         # each plane is a quad
+        assert mesh.faces.shape == (2, 3)         # each element is a quad
         assert not mesh.is_empty
+
+
+def test_reconstruct_planning_stone_solids(synthetic_adv_bytes):
+    doc = parse_bytes(synthetic_adv_bytes)
+    result = reconstruct_planning(synthetic_adv_bytes, doc, stone_solids=True)
+    by_name = {m.name: m for m in result.meshes}
+    # Pie element -> faceted brilliant-cut solid
+    assert by_name["Pie3-1"].faces.shape[0] > 50
+    assert not by_name["Pie3-1"].is_empty
+    # Saw elements stay flat cutting planes
+    assert by_name["Saw1-1"].faces.shape == (2, 3)
 
 
 def test_reconstruct_planning_solution_filter(synthetic_adv_bytes):
