@@ -81,6 +81,21 @@ def cmd_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- segment -----------------------------------------------------------------
+def cmd_segment(args: argparse.Namespace) -> int:
+    from .re_tools.segment import block_map, render_segments, segment_file
+
+    with open(args.file, "rb") as fh:
+        data = fh.read()
+    if args.ranked:
+        segments = block_map(data, window=args.window)
+        _log(render_segments(segments, ranked=True))
+    else:
+        segments = segment_file(data, window=args.window, min_size=args.window * 2)
+        _log(render_segments(segments))
+    return 0
+
+
 # -- diff --------------------------------------------------------------------
 def cmd_diff(args: argparse.Namespace) -> int:
     from .re_tools.diff import common_prefix, diff_regions
@@ -218,6 +233,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("probe", help="reverse-engineering diagnostics")
     p.add_argument("file")
     p.set_defaults(func=cmd_probe)
+
+    p = sub.add_parser("segment", help="entropy segmentation / block map")
+    p.add_argument("file")
+    p.add_argument("--window", type=int, default=8192, help="entropy window size")
+    p.add_argument("--ranked", action="store_true",
+                   help="rank segments by geometry confidence instead of file order")
+    p.set_defaults(func=cmd_segment)
 
     p = sub.add_parser("diff", help="binary diff of two files")
     p.add_argument("file_a")

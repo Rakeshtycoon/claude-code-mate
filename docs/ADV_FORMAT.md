@@ -122,40 +122,58 @@ live in the block described in §6.
 The recovered planar contours are still real, exported geometry; they are
 labelled as 2-D auxiliary contours, not presented as the rough surface.
 
-## 6. The opaque block — VERIFIED location, UNDECODED content
+## 6. File block map — VERIFIED by entropy segmentation
 
-The bulk of the main-model section — roughly **26 MB** of the 28 MB sample,
-spanning ≈ `0x10000` to ≈ `0x19B0000` — is a high-entropy block at
-≈ 8.0 bits/byte. This block holds the 3-D model (see §5). Established by
-probing:
+The main-model section is **not** one monolithic block. Fine-grained entropy
+segmentation (`advrecover segment`) reveals a consistent, reproducible
+layout across both samples. Offsets below are for `f7864efb-967.adv`;
+`b8968c0b-978.adv` differs only in block sizes, not in the pattern.
 
-* Entropy ≈ 8.0 — at the theoretical maximum; uniform across the whole span.
-* **No** embedded JPEG or PNG images.
-* **Not** a framed zlib/gzip stream — zlib byte pairs occur only at chance
-  frequency and do not decompress.
-* No periodic record framing, size table or chunk markers were found.
-* A short ASCII marker `"CRL"` appears at the block start (`0x10000`).
+| Range | Size | Entropy | Block kind | Decodable? |
+|-------|------|---------|------------|------------|
+| `0x000000–0x00E000` | 57 KB | ~3.0 | header / metadata / strings | **yes** — done |
+| `0x010000–0x0B0000` | 640 KB | ~7.99 | **`CRL` block** | no — compressed/encrypted |
+| `0x0B0000–0x2B0000` | 2.0 MB | ~6.28 | **plain float32 geometry** | **yes** — the 45 planar contours |
+| `0x2C0000–0xC00000` | ~9.7 MB | ~7.97 | large compressed block | no — compressed/encrypted |
+| `0xC00000–0xC60000` | 393 KB | ~5.7 | structured (planning tree) | partly — strings |
+| `0xC60000–0xCA0000` | 262 KB | ~7.99 | compressed block | no |
+| `0xCA0000–0x18B0000` | ~12 MB | 7.2–7.6 | alternating **dense** / **structured** chunks | partial — see below |
+| `0x18B0000–EOF` | ~0.7 MB | mixed | trailing data + zero padding | partial |
 
-Entropy this high and this uniform, with no decodable framing, is consistent
-with either a **proprietary compression** scheme or **encryption**. From only
-two sample files this block is **not decodable** — doing so realistically
-requires the Advisor application/SDK (to observe the decoder) or a much
-larger corpus of samples for differential analysis.
+Key facts established about the high-entropy regions:
 
-Consequence: a reconstruction that pixel-matches the original viewport
-cannot be produced from the plain data alone. The **200+ embedded JPEG
-previews** (section 4) are themselves rendered views of the planning model
-and are the pragmatic source for showing the visualisation today.
+* The `CRL` block and the ~9.7 MB block sit at entropy ≈ 7.99 (theoretical
+  max), uniform, with no framing — **proprietary compression or encryption**.
+* They contain **no** embedded JPEG/PNG and are **not** framed zlib/gzip.
+* The `0xCA0000–0x18B0000` region has a *periodic* ~24–44 KB chunk structure
+  alternating "dense" (≈ 7.5) and "structured" (≈ 7.0) sub-blocks — most
+  likely **per-element compressed geometry** (the file has ~430 `Saw`/`Pie`
+  planning elements). This is the **best secondary RE target**: the
+  "structured" sub-blocks may carry decodable per-element headers/transforms.
+
+**Confidence-ranked geometry targets** (from `advrecover segment --ranked`):
+
+1. `0x0B0000–0x2B0000` — confidence 0.90 — plain float contours *(decoded)*.
+2. `0xCA0000–0x18B0000` "structured" sub-blocks — confidence ~0.25 — likely
+   per-element headers; needs chunk-boundary RE.
+3. `CRL` + 9.7 MB blocks — confidence ~0.08 — compressed; needs the decoder.
+
+Conclusion: the true 3-D rough/polished/plane meshes live in the compressed
+blocks. Decoding them realistically requires the Advisor application/DLLs
+(to observe the decompressor) or a large sample corpus for differential
+analysis. The toolkit's `segment` / `probe` / `diff` commands are built to
+make exactly that work fast once those inputs are available.
 
 ## 7. Open questions (next RE iterations)
 
-1. **Decode the opaque ~26 MB block (§6)** — the only route to the true 3-D
-   model. Best attacked with the Advisor application/SDK or many samples.
-2. Identify the `"CRL"` marker at `0x10000` and any block sub-structure.
+1. **Decode the `CRL` block and the 9.7 MB block** — identify the
+   compression/encryption (best done by tracing the Advisor decoder).
+2. RE the periodic chunk structure in `0xCA0000–0x18B0000`; extract
+   per-element headers and any transform matrices.
 3. Meaning / role of the single common plane shared by all contour records.
 4. Plane equations for `Saw` planes (normal + offset).
 5. Inclusion / internal-feature records.
 6. Meaning of `const_a` / `const_b` (61809 / 2359 — constant across samples).
 
-Use `advrecover probe` and `advrecover inspect` to extend this spec; every
+Use `advrecover segment`, `probe` and `diff` to extend this spec; every
 finding should be added here with a VERIFIED/HYPOTHESIS tag.
