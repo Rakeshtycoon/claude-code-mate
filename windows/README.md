@@ -14,7 +14,7 @@ in this order, the very first time you use the tool.
 
 | File | What it does |
 |------|--------------|
-| **2-open-viewer.bat** | Opens the 3D viewer window. Use *File -> Open* to load a .adv file. |
+| **2-open-viewer.bat** | Opens the 3D viewer window. Use *File -> Open* to load a .adv file. The **Previews** tab on the left shows the *original* Advisor renders embedded in the file (double-click any thumbnail to enlarge or save). |
 | **3-convert-file.bat** | Convert ONE .adv file to .obj / .stl. Drag the .adv into the window when asked. |
 | **4-convert-folder.bat** | Convert ALL .adv files inside a folder. Drag the folder into the window when asked. |
 | **5-show-file-info.bat** | Just print what is inside a .adv file (metadata, solutions, etc). |

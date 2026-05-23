@@ -43,19 +43,24 @@ def launch(path: str | None = None) -> int:
 
 
 def _build_window_class():
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import Qt, QSize
+    from PySide6.QtGui import QIcon, QImage, QPixmap
     from PySide6.QtWidgets import (
         QCheckBox,
         QComboBox,
+        QDialog,
         QDockWidget,
         QDoubleSpinBox,
         QFileDialog,
         QGroupBox,
+        QHBoxLayout,
         QLabel,
         QListWidget,
+        QListWidgetItem,
         QMainWindow,
         QPlainTextEdit,
         QPushButton,
+        QScrollArea,
         QSlider,
         QTabWidget,
         QTreeWidget,
@@ -99,6 +104,8 @@ def _build_window_class():
             file_menu.addAction("Export &STL…", lambda: self._export("stl"))
             file_menu.addAction("&Batch convert folder…", self._batch)
             file_menu.addSeparator()
+            file_menu.addAction("Export all &previews…", self._export_previews)
+            file_menu.addSeparator()
             file_menu.addAction("E&xit", self.close)
 
             view_menu = self.menuBar().addMenu("&View")
@@ -118,8 +125,19 @@ def _build_window_class():
             self.solution_list.itemSelectionChanged.connect(self._on_solution_changed)
             tabs.addTab(self.solution_list, "Solutions")
 
+            self.preview_list = QListWidget()
+            self.preview_list.setViewMode(QListWidget.IconMode)
+            self.preview_list.setIconSize(QSize(140, 140))
+            self.preview_list.setResizeMode(QListWidget.Adjust)
+            self.preview_list.setMovement(QListWidget.Static)
+            self.preview_list.setSpacing(4)
+            self.preview_list.setUniformItemSizes(True)
+            self.preview_list.itemDoubleClicked.connect(self._show_preview)
+            tabs.addTab(self.preview_list, "Previews")
+
             dock = QDockWidget("Document", self)
             dock.setWidget(tabs)
+            dock.setMinimumWidth(340)
             self.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
         def _build_right_dock(self) -> None:
@@ -226,6 +244,7 @@ def _build_window_class():
                     self.raw_data = fh.read()
                 self._populate_tree()
                 self._populate_solutions()
+                self._populate_previews()
                 self.current_solution = None
                 self._rebuild()
                 self.setWindowTitle(
@@ -280,6 +299,108 @@ def _build_window_class():
             self.current_solution = (None if text.startswith("(all")
                                      else text.split()[1])
             self._rebuild()
+
+        # -- embedded JPEG previews (real Advisor renders) ----------------
+        def _populate_previews(self) -> None:
+            self.preview_list.clear()
+            if self.document is None or not self.document.previews:
+                return
+            loaded = 0
+            for idx, preview in enumerate(self.document.previews):
+                img = QImage.fromData(preview.data)
+                if img.isNull():
+                    continue
+                pix = QPixmap.fromImage(img).scaled(
+                    140, 140, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                item = QListWidgetItem(QIcon(pix), f"#{idx + 1:03d}")
+                item.setData(Qt.UserRole, idx)
+                item.setToolTip(f"Preview {idx + 1}/{len(self.document.previews)} "
+                                f"— {len(preview.data):,} bytes\nDouble-click to enlarge")
+                self.preview_list.addItem(item)
+                loaded += 1
+            self.log(f"Loaded {loaded} embedded preview image(s) — "
+                     f"double-click any thumbnail to see the original Advisor render.")
+
+        def _show_preview(self, item) -> None:
+            if self.document is None:
+                return
+            idx = item.data(Qt.UserRole)
+            if idx is None or idx >= len(self.document.previews):
+                return
+            preview = self.document.previews[idx]
+            img = QImage.fromData(preview.data)
+            if img.isNull():
+                self.log(f"Preview #{idx + 1} could not be decoded.")
+                return
+
+            dlg = QDialog(self)
+            dlg.setWindowTitle(
+                f"Preview #{idx + 1} of {len(self.document.previews)} — "
+                f"original Advisor render ({img.width()}×{img.height()})")
+            dlg.resize(min(img.width() + 60, 1200),
+                       min(img.height() + 100, 900))
+
+            v = QVBoxLayout(dlg)
+            label = QLabel()
+            label.setAlignment(Qt.AlignCenter)
+            label.setPixmap(QPixmap.fromImage(img))
+            scroll = QScrollArea()
+            scroll.setWidget(label)
+            scroll.setWidgetResizable(False)
+            scroll.setAlignment(Qt.AlignCenter)
+            v.addWidget(scroll, 1)
+
+            buttons = QWidget()
+            h = QHBoxLayout(buttons)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.addStretch(1)
+            save_btn = QPushButton("Save as…")
+            save_btn.clicked.connect(lambda: self._save_preview(idx))
+            h.addWidget(save_btn)
+            close_btn = QPushButton("Close")
+            close_btn.clicked.connect(dlg.accept)
+            h.addWidget(close_btn)
+            v.addWidget(buttons)
+            dlg.exec()
+
+        def _save_preview(self, idx: int) -> None:
+            if (self.document is None
+                    or idx >= len(self.document.previews)):
+                return
+            preview = self.document.previews[idx]
+            stem = os.path.splitext(os.path.basename(self.document.path))[0]
+            default = f"{stem}_preview_{idx + 1:03d}.jpg"
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save preview as JPEG", default, "JPEG (*.jpg *.jpeg)")
+            if not path:
+                return
+            try:
+                with open(path, "wb") as fh:
+                    fh.write(preview.data)
+                self.log(f"Saved preview #{idx + 1} to {path}")
+            except OSError as exc:
+                self.log(f"ERROR saving preview: {exc}")
+
+        def _export_previews(self) -> None:
+            if self.document is None or not self.document.previews:
+                self.log("No previews to export — open a .ADV file first.")
+                return
+            directory = QFileDialog.getExistingDirectory(
+                self, "Choose folder to save all previews")
+            if not directory:
+                return
+            stem = os.path.splitext(os.path.basename(self.document.path))[0]
+            saved = 0
+            for idx, preview in enumerate(self.document.previews):
+                out = os.path.join(directory, f"{stem}_preview_{idx + 1:03d}.jpg")
+                try:
+                    with open(out, "wb") as fh:
+                        fh.write(preview.data)
+                    saved += 1
+                except OSError as exc:
+                    self.log(f"  failed {out}: {exc}")
+            self.log(f"Exported {saved}/{len(self.document.previews)} "
+                     f"preview(s) to {directory}")
 
         # -- scene build / render -----------------------------------------
         def _rebuild(self) -> None:
