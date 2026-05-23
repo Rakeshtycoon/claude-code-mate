@@ -84,9 +84,11 @@ def build_scene(
     *,
     solution: str | None = None,
     geometry_method: str = "hull",
-    plane_size_mm: float = 7.0,
+    plane_size_mm: float | None = None,
 ) -> SceneModel:
     """Assemble a :class:`SceneModel` from a parsed document."""
+    from ..recon.planning import hull_proxy
+
     model = SceneModel()
 
     # -- planning reconstruction (decoded, real geometry) ------------------
@@ -98,14 +100,26 @@ def build_scene(
     saw_lines = [c for c in planning.contours if c.name.startswith("Saw")]
     pie_lines = [c for c in planning.contours if c.name.startswith("Pie")]
 
-    # -- geometry reconstruction (template-based proxy) --------------------
+    # -- rough-body proxy --------------------------------------------------
+    # When a single solution is selected, build a convex hull of the
+    # planning-element positions: a faceted envelope that visually wraps
+    # the saw planes and planned stones. For "all solutions" or when the
+    # hull has too few points, fall back to the stacked-contour proxy.
     geometry = reconstruct(data, doc, method=geometry_method)
-    model.notes += geometry.notes
+    hull = hull_proxy(data, doc, solution=solution) if solution else None
+    if hull is not None and not hull.is_empty:
+        rough_meshes = [hull]
+        model.notes.append(
+            "rough body: convex hull of planning-element positions "
+            "(approximate envelope; the real 3-D mesh is in the encoded block)")
+    else:
+        rough_meshes = geometry.meshes
+        model.notes += geometry.notes
 
     # -- layers ------------------------------------------------------------
     model.layers = [
         SceneLayer("rough_body", "Rough body (proxy)", (0.80, 0.64, 0.68),
-                   0.30, True, meshes=geometry.meshes, inferred=True),
+                   0.30, True, meshes=rough_meshes, inferred=True),
         SceneLayer("cutting_planes", "Cutting planes", (0.25, 0.78, 0.45),
                    0.55, True, meshes=saw, lines=saw_lines),
         SceneLayer("planned_stones", "Planned stones", (0.95, 0.83, 0.28),

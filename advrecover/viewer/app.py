@@ -21,7 +21,7 @@ from ..format import parse_file
 from ..format.constants import guid_name
 from ..recon import METHODS
 from ..recon.mesh import ReconResult
-from ..recon.planning import list_solutions, reconstruct_planning
+from ..recon.planning import best_solution, list_solutions, reconstruct_planning
 from .scene import (
     build_scene,
     mesh_to_polydata,
@@ -159,7 +159,11 @@ def _build_window_class():
                 ("axes", "Coordinate axes"),
             ):
                 check = QCheckBox(label)
-                check.setChecked(key not in ("bounding_box", "contours", "point_cloud"))
+                # rough_body is on (it's now the hull proxy when a single
+                # solution is selected — much more useful than stacked 2-D
+                # contours were). Inclusions stay on but typically empty.
+                check.setChecked(key not in ("bounding_box", "contours",
+                                              "point_cloud"))
                 check.stateChanged.connect(self._apply_visibility)
                 box_layout.addWidget(check)
                 self.layer_checks[key] = check
@@ -189,10 +193,11 @@ def _build_window_class():
             self.method_combo = QComboBox()
             self.method_combo.addItems([m for m in METHODS if m != "pointcloud"])
             box_layout.addWidget(self.method_combo)
-            box_layout.addWidget(QLabel("Plane size (mm)"))
+            box_layout.addWidget(QLabel("Plane size (mm, 0 = auto)"))
             self.plane_size = QDoubleSpinBox()
-            self.plane_size.setRange(1.0, 30.0)
-            self.plane_size.setValue(7.0)
+            self.plane_size.setRange(0.0, 30.0)
+            self.plane_size.setValue(0.0)
+            self.plane_size.setSpecialValueText("auto")
             box_layout.addWidget(self.plane_size)
             rebuild = QPushButton("Rebuild scene")
             rebuild.clicked.connect(self._rebuild)
@@ -245,7 +250,14 @@ def _build_window_class():
                 self._populate_tree()
                 self._populate_solutions()
                 self._populate_previews()
-                self.current_solution = None
+                # Auto-pick the most-elements solution so the default view
+                # is a single clean cut plan rather than 100+ overlapping ones.
+                pick = best_solution(self.raw_data, self.document)
+                self.current_solution = pick
+                if pick is not None:
+                    self._select_solution_in_list(pick)
+                    self.log(f"Auto-selected solution {pick} (most elements). "
+                             f"Pick another from the Solutions tab to compare.")
                 self._rebuild()
                 self.setWindowTitle(
                     f"ADV Planning Data Recovery — {os.path.basename(path)}")
@@ -299,6 +311,18 @@ def _build_window_class():
             self.current_solution = (None if text.startswith("(all")
                                      else text.split()[1])
             self._rebuild()
+
+        def _select_solution_in_list(self, sid: str) -> None:
+            """Programmatically select a solution by id, without firing rebuild."""
+            self.solution_list.blockSignals(True)
+            try:
+                for i in range(self.solution_list.count()):
+                    text = self.solution_list.item(i).text()
+                    if not text.startswith("(all") and text.split()[1] == sid:
+                        self.solution_list.setCurrentRow(i)
+                        return
+            finally:
+                self.solution_list.blockSignals(False)
 
         # -- embedded JPEG previews (real Advisor renders) ----------------
         def _populate_previews(self) -> None:
@@ -412,11 +436,12 @@ def _build_window_class():
             try:
                 self.log(f"Building scene (solution: "
                          f"{self.current_solution or 'all'}) …")
+                size_value = self.plane_size.value()
                 self.scene = build_scene(
                     self.raw_data, self.document,
                     solution=self.current_solution,
                     geometry_method=self.method_combo.currentText(),
-                    plane_size_mm=self.plane_size.value())
+                    plane_size_mm=size_value if size_value > 0 else None)
                 for note in self.scene.notes:
                     self.log(f"  {note}")
                 self._render()

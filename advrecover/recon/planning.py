@@ -97,12 +97,13 @@ def reconstruct_planning(
     doc: AdvDocument,
     *,
     scale_to_mm: bool = True,
-    plane_size_mm: float = 7.0,
+    plane_size_mm: float | None = None,
     kinds: tuple[str, ...] = ("saw", "pie"),
     solution: str | None = None,
     stone_solids: bool = True,
-    stone_diameter_mm: float = 3.0,
+    stone_diameter_mm: float | None = None,
     cut_family: str = "round_brilliant",
+    auto_size: bool = True,
 ) -> ReconResult:
     """Reconstruct the planning model (cutting planes + planned stones).
 
@@ -113,10 +114,13 @@ def reconstruct_planning(
     With ``stone_solids`` set, each ``Pie`` element is rendered as a faceted
     brilliant-cut solid (oriented by its decoded normal); otherwise it is a
     flat proxy plane like the ``Saw`` cutting planes.
+
+    If ``auto_size`` is True (default) and neither ``plane_size_mm`` nor
+    ``stone_diameter_mm`` is given, both are derived from the bounding box
+    of the selected planning elements so the rendered planes and stones
+    visually match the data scale instead of using fixed-mm defaults.
     """
     factor = 1.0 / MICRONS_PER_MM if scale_to_mm else 1.0
-    size = plane_size_mm if scale_to_mm else plane_size_mm * MICRONS_PER_MM
-    diameter = stone_diameter_mm if scale_to_mm else stone_diameter_mm * MICRONS_PER_MM
 
     elements = [e for e in parse_elements(data, doc) if e.kind in kinds]
     if solution is not None:
@@ -125,6 +129,29 @@ def reconstruct_planning(
     if not elements:
         result.notes.append("no decodable Saw/Pie planning elements found")
         return result
+
+    if auto_size and (plane_size_mm is None or stone_diameter_mm is None):
+        positions = np.array(
+            [np.array(e.normal) * e.offset * factor for e in elements])
+        extent = float(np.linalg.norm(positions.max(axis=0)
+                                      - positions.min(axis=0)))
+        if extent < 1e-6:
+            extent = 5.0
+        if plane_size_mm is None:
+            plane_size_mm = max(2.0, min(20.0, extent * 1.25))
+        if stone_diameter_mm is None:
+            pies = sum(1 for e in elements if e.kind == "pie")
+            divisor = max(1, pies) if solution else max(2, pies // 4)
+            stone_diameter_mm = max(0.5, min(extent * 0.55 / divisor**0.4,
+                                             extent * 0.9))
+    if plane_size_mm is None:
+        plane_size_mm = 7.0
+    if stone_diameter_mm is None:
+        stone_diameter_mm = 3.0
+
+    size = plane_size_mm if scale_to_mm else plane_size_mm * MICRONS_PER_MM
+    diameter = (stone_diameter_mm if scale_to_mm
+                else stone_diameter_mm * MICRONS_PER_MM)
 
     saws = sum(1 for e in elements if e.kind == "saw")
     pies = sum(1 for e in elements if e.kind == "pie")
@@ -135,8 +162,9 @@ def reconstruct_planning(
         f"elements ({saws} saw planes, {pies} planned stones as {stone_mode})"
     )
     result.notes.append(f"units: {'mm' if scale_to_mm else 'micron'}; "
-                        f"plane size {plane_size_mm} mm, "
-                        f"stone diameter {stone_diameter_mm} mm")
+                        f"plane size {plane_size_mm:.2f} mm, "
+                        f"stone diameter {stone_diameter_mm:.2f} mm "
+                        f"({'auto-sized' if auto_size else 'fixed'})")
 
     for element in elements:
         if element.kind == "pie" and stone_solids:
@@ -154,3 +182,49 @@ def list_solutions(data: bytes, doc: AdvDocument) -> dict[str, int]:
     for element in parse_elements(data, doc):
         counts[element.solution] = counts.get(element.solution, 0) + 1
     return counts
+
+
+def best_solution(data: bytes, doc: AdvDocument) -> str | None:
+    """Pick the most informative solution to render by default.
+
+    Prefers solutions with the most elements; breaks ties by lowest id.
+    """
+    counts = list_solutions(data, doc)
+    if not counts:
+        return None
+    return min(counts.items(), key=lambda kv: (-kv[1], int(kv[0])
+                                               if kv[0].isdigit() else 9999))[0]
+
+
+def hull_proxy(data: bytes, doc: AdvDocument, *,
+               solution: str | None = None,
+               scale_to_mm: bool = True) -> Mesh:
+    """Convex hull of the planning-element positions: a rough-body proxy.
+
+    With the proprietary 3-D mesh in the encoded block locked, the hull of
+    the saw-plane centres and planned-stone centres is the closest we can
+    get to the actual rough's outer envelope without faking data. Returned
+    as a single faceted ``Mesh``; empty if there are fewer than 4 elements.
+    """
+    factor = 1.0 / MICRONS_PER_MM if scale_to_mm else 1.0
+    elements = [e for e in parse_elements(data, doc) if e.kind in ("saw", "pie")]
+    if solution is not None:
+        elements = [e for e in elements if e.solution == solution]
+    empty = Mesh(np.zeros((0, 3), dtype=np.float32),
+                 np.zeros((0, 3), dtype=np.int32), name="rough_hull")
+    if len(elements) < 4:
+        return empty
+    pts = np.array([np.array(e.normal) * e.offset * factor for e in elements],
+                   dtype=np.float64)
+    if pts.shape[0] < 4:
+        return empty
+    try:
+        from scipy.spatial import ConvexHull
+        hull = ConvexHull(pts)
+    except Exception:                                       # noqa: BLE001
+        return empty
+    verts = pts[hull.vertices].astype(np.float32)
+    remap = {old: new for new, old in enumerate(hull.vertices)}
+    faces = np.array([[remap[i] for i in simplex] for simplex in hull.simplices],
+                     dtype=np.int32)
+    return Mesh(verts, faces, name="rough_hull").compute_normals()
