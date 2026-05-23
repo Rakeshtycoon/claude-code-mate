@@ -22,18 +22,21 @@ from .util import bbox, vdot
 log = logging.getLogger("adv2mesh")
 
 
-def _setup_logging(out_dir, verbose):
-    log.handlers.clear()
+def _setup_log_file(out_dir, verbose):
+    """Attach a per-run FileHandler to the package logger and return it.
+
+    Console / GUI handlers are the caller's responsibility - we never touch
+    pre-existing handlers, so the same `convert()` works under the CLI and
+    inside the Tkinter GUI thread without conflict.
+    """
     log.setLevel(logging.DEBUG if verbose else logging.INFO)
     fmt = logging.Formatter("%(asctime)s  %(levelname)-7s  %(message)s",
                             "%H:%M:%S")
-    sh = logging.StreamHandler()
-    sh.setFormatter(fmt)
-    log.addHandler(sh)
     fh = logging.FileHandler(os.path.join(out_dir, "extraction.log"), "w")
     fh.setFormatter(fmt)
     fh.setLevel(logging.DEBUG)
     log.addHandler(fh)
+    return fh
 
 
 def convert(adv_path, out_dir, *, loft=True, debug_png=True, verbose=False):
@@ -48,7 +51,15 @@ def convert(adv_path, out_dir, *, loft=True, debug_png=True, verbose=False):
     verbose   : DEBUG-level logging
     """
     os.makedirs(out_dir, exist_ok=True)
-    _setup_logging(out_dir, verbose)
+    fh = _setup_log_file(out_dir, verbose)
+    try:
+        return _convert_impl(adv_path, out_dir, loft, debug_png)
+    finally:
+        log.removeHandler(fh)
+        fh.close()
+
+
+def _convert_impl(adv_path, out_dir, loft, debug_png):
     log.info("adv2mesh - converting %s", adv_path)
 
     with open(adv_path, "rb") as f:

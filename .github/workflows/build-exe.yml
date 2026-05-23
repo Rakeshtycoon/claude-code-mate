@@ -1,0 +1,55 @@
+name: Build Windows EXE
+
+# Builds a single-file Windows GUI executable for the adv2mesh converter
+# on every push, and also on manual dispatch. The exe is uploaded as a
+# workflow artifact - non-developers can download it from the Actions
+# tab without installing Python.
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+      - main
+    paths:
+      - 'adv2mesh/**'
+      - 'adv2mesh_app.py'
+      - '.github/workflows/build-exe.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller==6.6.0
+
+      - name: Smoke-test the package
+        run: python -c "import adv2mesh; print('adv2mesh', adv2mesh.__version__)"
+
+      - name: Build single-file EXE
+        run: |
+          pyinstaller --onefile --windowed --name adv2mesh `
+                      --collect-submodules adv2mesh `
+                      adv2mesh_app.py
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adv2mesh-windows-exe
+          path: dist/adv2mesh.exe
+          retention-days: 90
+
+      - name: Show artifact info
+        run: |
+          Get-ChildItem dist
+          Write-Host "Download the artifact 'adv2mesh-windows-exe' from this workflow run."

@@ -4,6 +4,7 @@ Usage:
     python -m adv2mesh INPUT.adv [-o OUTDIR] [--no-loft] [--no-debug] [-v]
 """
 import argparse
+import logging
 import sys
 import os
 
@@ -11,7 +12,22 @@ from .pipeline import convert
 from .container import ADVFormatError
 
 
+def _add_console_handler():
+    """Stream INFO+ to stderr - safe to no-op when stderr is missing (--windowed exe)."""
+    log = logging.getLogger("adv2mesh")
+    if any(isinstance(h, logging.StreamHandler) and
+           not isinstance(h, logging.FileHandler) for h in log.handlers):
+        return
+    if sys.stderr is None:
+        return
+    sh = logging.StreamHandler()
+    sh.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-7s  %(message)s", "%H:%M:%S"))
+    log.addHandler(sh)
+
+
 def main(argv=None):
+    _add_console_handler()
     ap = argparse.ArgumentParser(
         prog="adv2mesh",
         description="Convert proprietary .ADV diamond planning files into "
