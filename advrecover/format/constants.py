@@ -21,6 +21,7 @@ SECTION_PREVIEWS = Guid.from_string("511059A4-4997-46DA-A7AE-63BD206014A1")
 # GUIDs seen nested inside sections (roles still under investigation) --------
 NESTED_SUBDOC = Guid.from_string("5A888D07-AB1B-4B63-BA1B-6D11FCC46746")
 NESTED_B84937EA = Guid.from_string("B84937EA-2A89-4DCC-9342-168B76CBD989")
+NESTED_CLOUD = Guid.from_string("89B2F295-9627-483B-A7A2-00CBA02F27AB")  # 3-D cloud serialization wrapper
 
 #: Human-readable names, keyed by GUID. Used by the diagnostics panel.
 GUID_NAMES: dict[Guid, str] = {
@@ -32,7 +33,11 @@ GUID_NAMES: dict[Guid, str] = {
     SECTION_PREVIEWS: "Embedded JPEG previews section",
     NESTED_SUBDOC: "Sub-document (nested)",
     NESTED_B84937EA: "Unclassified nested object",
+    NESTED_CLOUD: "3-D point cloud serialization",
 }
+
+# ZIP local-file-header signature; section[1] is a concatenation of ZIPs.
+ZIP_LFH_MAGIC = b"PK\x03\x04"
 
 #: Role tag per section id (HYPOTHESIS where the payload is not yet decoded).
 SECTION_ROLE: dict[int, str] = {

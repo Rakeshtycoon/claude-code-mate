@@ -19,7 +19,7 @@ from ..recon.planning import reconstruct_planning
 # Layer keys, in display order.
 LAYER_ORDER = (
     "rough_body", "cutting_planes", "planned_stones",
-    "inclusions", "bounding_box", "contours", "point_cloud", "axes",
+    "inclusions", "surface_points", "bounding_box", "contours", "axes",
 )
 
 
@@ -78,6 +78,48 @@ def _bbox_lines(lo: np.ndarray, hi: np.ndarray) -> list[PolyLine]:
             for i, e in enumerate(edges)]
 
 
+def _build_real_meshes(doc: AdvDocument):
+    """Build a rough-body mesh and inclusion point set from the decoded clouds.
+
+    Returns ``(rough_meshes, inclusion_points_mm, surface_points_mm, used_real)``.
+    Falls back to ``([], None, None, False)`` if no usable clouds are present.
+    """
+    if not doc.clouds:
+        return [], None, None, False
+    from ..format.constants import MICRONS_PER_MM
+
+    cloud_verts = [c.vertices for c in doc.clouds
+                   if c.kind == "cloud" and len(c.vertices)]
+    inclusion_verts = [c.vertices for c in doc.clouds
+                       if c.kind == "inclusion" and len(c.vertices)]
+
+    rough_meshes: list[Mesh] = []
+    surface_pts_mm = None
+    if cloud_verts:
+        surface_pts_um = np.vstack(cloud_verts)
+        surface_pts_mm = (surface_pts_um / MICRONS_PER_MM).astype(np.float32)
+        if surface_pts_mm.shape[0] >= 4:
+            try:
+                from scipy.spatial import ConvexHull
+                hull = ConvexHull(surface_pts_mm.astype(np.float64))
+                verts = surface_pts_mm[hull.vertices].astype(np.float32)
+                remap = {old: new for new, old in enumerate(hull.vertices)}
+                faces = np.array([[remap[i] for i in s] for s in hull.simplices],
+                                 dtype=np.int32)
+                rough_meshes = [Mesh(verts, faces, name="rough_body")
+                                .compute_normals()]
+            except Exception:                                 # noqa: BLE001
+                rough_meshes = []
+
+    inclusion_pts_mm = None
+    if inclusion_verts:
+        inclusion_pts_mm = (np.vstack(inclusion_verts) / MICRONS_PER_MM
+                            ).astype(np.float32)
+
+    used_real = bool(rough_meshes) or inclusion_pts_mm is not None
+    return rough_meshes, inclusion_pts_mm, surface_pts_mm, used_real
+
+
 def build_scene(
     data: bytes,
     doc: AdvDocument,
@@ -100,39 +142,57 @@ def build_scene(
     saw_lines = [c for c in planning.contours if c.name.startswith("Saw")]
     pie_lines = [c for c in planning.contours if c.name.startswith("Pie")]
 
-    # -- rough-body proxy --------------------------------------------------
-    # When a single solution is selected, build a convex hull of the
-    # planning-element positions: a faceted envelope that visually wraps
-    # the saw planes and planned stones. For "all solutions" or when the
-    # hull has too few points, fall back to the stacked-contour proxy.
-    geometry = reconstruct(data, doc, method=geometry_method)
-    hull = hull_proxy(data, doc, solution=solution) if solution else None
-    if hull is not None and not hull.is_empty:
-        rough_meshes = [hull]
+    # -- real rough body and inclusions, decoded from the section[1] clouds
+    rough_meshes, inclusion_points, surface_points, used_real = (
+        _build_real_meshes(doc))
+    if used_real:
         model.notes.append(
-            "rough body: convex hull of planning-element positions "
-            "(approximate envelope; the real 3-D mesh is in the encoded block)")
+            f"rough body: convex hull of {surface_points.shape[0]:,} decoded "
+            f"surface points from {len([c for c in doc.clouds if c.kind == 'cloud'])} "
+            f"labeled cloud patches (REAL scanned geometry)")
+        if inclusion_points is not None and len(inclusion_points):
+            model.notes.append(
+                f"inclusions: {inclusion_points.shape[0]:,} decoded "
+                f"interior points from {len([c for c in doc.clouds if c.kind == 'inclusion'])} "
+                f"inclusion meshes (REAL scanner data)")
     else:
-        rough_meshes = geometry.meshes
-        model.notes += geometry.notes
+        # Fall back to convex hull of planning elements if no clouds decoded
+        geometry = reconstruct(data, doc, method=geometry_method)
+        hull = hull_proxy(data, doc, solution=solution) if solution else None
+        if hull is not None and not hull.is_empty:
+            rough_meshes = [hull]
+            model.notes.append(
+                "rough body: convex hull of planning-element positions "
+                "(approximate envelope; no clouds decoded from section[1])")
+        else:
+            rough_meshes = geometry.meshes
+            model.notes += geometry.notes
+        inclusion_points = None
+        surface_points = None
+    contour_lines = reconstruct(data, doc, method=geometry_method).contours
 
     # -- layers ------------------------------------------------------------
     model.layers = [
-        SceneLayer("rough_body", "Rough body (proxy)", (0.80, 0.64, 0.68),
-                   0.30, True, meshes=rough_meshes, inferred=True),
+        SceneLayer("rough_body", "Rough body" + ("" if used_real else " (proxy)"),
+                   (0.80, 0.64, 0.68), 0.30, True, meshes=rough_meshes,
+                   inferred=not used_real),
         SceneLayer("cutting_planes", "Cutting planes", (0.25, 0.78, 0.45),
                    0.55, True, meshes=saw, lines=saw_lines),
         SceneLayer("planned_stones", "Planned stones", (0.95, 0.83, 0.28),
                    0.80, True, meshes=pie, lines=pie_lines),
-        SceneLayer("inclusions", "Inclusion markers", (0.85, 0.20, 0.20),
-                   1.0, True),
+        SceneLayer("inclusions", "Inclusions" + ("" if used_real else " (markers)"),
+                   (0.85, 0.20, 0.20), 1.0, True,
+                   points=inclusion_points if inclusion_points is not None else None,
+                   kind="points" if inclusion_points is not None else "surface"),
+        SceneLayer("surface_points", "Surface scan points", (0.40, 0.55, 0.80),
+                   1.0, False,
+                   points=surface_points if surface_points is not None else None,
+                   kind="points"),
         SceneLayer("bounding_box", "Bounding box", (0.45, 0.45, 0.50),
                    1.0, False, kind="wireframe"),
         SceneLayer("contours", "Contour template", (0.20, 0.45, 0.85),
-                   1.0, False, lines=geometry.contours, inferred=True,
+                   1.0, False, lines=contour_lines, inferred=True,
                    kind="wireframe"),
-        SceneLayer("point_cloud", "Point cloud", (0.55, 0.55, 0.60),
-                   1.0, False, points=geometry.point_cloud, kind="points"),
         SceneLayer("axes", "Coordinate axes", (0.3, 0.3, 0.3), 1.0, True),
     ]
 

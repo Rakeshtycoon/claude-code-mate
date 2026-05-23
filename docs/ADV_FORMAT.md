@@ -209,17 +209,69 @@ real OBJ/STL geometry traced entirely to decoded records — the rough
 *scanned* surface still needs the §6 codec, but the cut planning is
 recovered.
 
+## 6c. 3-D point clouds — DECODED (no DLLs needed)
+
+The "high-entropy" mid-zone of `section[1]` turned out to be a
+**concatenation of standalone ZIP archives** (LFH magic `50 4B 03 04`,
+deflate method 8). Each archive contains a single entry named
+`ZippedData` whose decompressed body is one labeled 3-D point cloud.
+
+Verified on `1196.adv`: 465 ZIP local-file-headers → 438 labeled cloud
+records → 209 `Cloud<N> - (3D)` surface patches (23 925 vertices total)
+plus 229 `Inc<N> - (3D)` inclusion meshes (22 033 interior vertices).
+Combined bounding box for `1196.adv`: 1.87 × 1.98 × 2.71 mm — a real
+diamond-scale envelope.
+
+ZippedData record layout (verified on entries `Cloud8`, `Cloud520`,
+`Cloud24`, `Inc1032`, `Inc1024`, `Inc6`, `Inc7` ...):
+
+```
+u32  marker = 1
+f64  scalar (per-cloud accumulator — likely surface area or radius)
+u32  = 1
+u64  = 0
+u32  = 1
+u32  = 0
+u32  name_len ; name_len * char  label e.g. "Cloud520 - (3D)"
+u32  = 3      ; 3 * f64           centroid / bbox-centre triple
+str_no_prefix "SawID"  4 * u8 = 0xFF marker  ... per-record padding
+[ repeat for each LOD level: ]
+    16 * u8  class GUID = 89B2F295-9627-483B-A7A2-00CBA02F27AB
+    u32  version (= 1)
+    u32  format tag (0x1018 / 0x0D20 / ... — vertex-format flags)
+    u32  vertex_count
+    vertex_count * 3 * f64  coordinates in MICRONS, diamond local frame
+```
+
+Same coordinate system as the planning elements (§6b), so cloud points,
+saw planes and planned stones live in one frame and can be rendered
+together without any transform.
+
+Triangle indices appear after each vertex array but their layout
+**alternates with optional LOD copies of the same vertex set** — still
+under investigation. The convex hull of the union of all `Cloud*`
+vertices is a faithful approximate rough body; for a true non-convex
+surface the per-cloud triangulation must be decoded.
+
+A small int16-quadruple tail (~70 000 records at ~80 µm spacing) sits
+near the end of `section[1]` after the last ZIP archive — interpreted as
+the raw scanner depth-map dump (not yet wired in).
+
 ## 7. Open questions (next RE iterations)
 
-1. **Decode the high-entropy blocks (§6)** — the scanned rough/polished
-   meshes; needs the Advisor decoder (the data is *not* encrypted, so this
-   is tractable with the DLLs).
+1. ~~Decode the high-entropy blocks~~ — **done**, see §6c.
 2. Confirm the meaning of the `fixed` (≈54.0) field and whether `offset` is
    a distance from origin or along another datum.
-3. Align the ~347 per-element chunks (§6a) to the named elements (§6b).
-4. Meaning / role of the single common plane shared by all contour records.
-5. Inclusion / internal-feature records.
+3. Align the ~347 per-element chunks (§6a) to the named cloud / planning
+   records (§6b, §6c) — element ids (`Cloud520`, `Pie17-1`, etc.) likely
+   index the same table.
+4. Decode the per-cloud **triangle index list** so we can render true
+   (non-convex) facet surfaces, not just convex hulls.
+5. Meaning of the int16 quadruple tail (~70 000 points after the last
+   ZIP archive); likely the laser scanner's raw depth dump.
 6. Meaning of `const_a` / `const_b` (61809 / 2359 — constant across samples).
+7. Per-record format tag (`0x1018`, `0x0D20`, ...) — likely vertex-format
+   flags (with/without normals, indexed/raw).
 
 Use `advrecover segment`, `probe` and `diff` to extend this spec; every
 finding should be added here with a VERIFIED/HYPOTHESIS tag.

@@ -149,21 +149,20 @@ def _build_window_class():
             box_layout = QVBoxLayout(box)
             self.layer_checks: dict[str, QCheckBox] = {}
             for key, label in (
-                ("rough_body", "Rough body (proxy)"),
+                ("rough_body", "Rough body"),
                 ("cutting_planes", "Cutting planes"),
                 ("planned_stones", "Planned stones"),
-                ("inclusions", "Inclusion markers"),
+                ("inclusions", "Inclusions"),
+                ("surface_points", "Surface scan points"),
                 ("bounding_box", "Bounding box"),
                 ("contours", "Contour template"),
-                ("point_cloud", "Point cloud"),
                 ("axes", "Coordinate axes"),
             ):
                 check = QCheckBox(label)
-                # rough_body is on (it's now the hull proxy when a single
-                # solution is selected — much more useful than stacked 2-D
-                # contours were). Inclusions stay on but typically empty.
-                check.setChecked(key not in ("bounding_box", "contours",
-                                              "point_cloud"))
+                # surface_points / bounding_box / contours stay off by default
+                # — they're useful diagnostics but visually noisy.
+                check.setChecked(key not in (
+                    "bounding_box", "contours", "surface_points"))
                 check.stateChanged.connect(self._apply_visibility)
                 box_layout.addWidget(check)
                 self.layer_checks[key] = check

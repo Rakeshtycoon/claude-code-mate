@@ -105,6 +105,7 @@ class AdvDocument:
     sections: list[Section] = field(default_factory=list)
     main_model: MainModel | None = None
     previews: list[PreviewImage] = field(default_factory=list)
+    clouds: list = field(default_factory=list)        # list[CloudEntry]
     unknown_blocks: list[UnknownBlock] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 

@@ -60,6 +60,7 @@ def parse_bytes(data: bytes, path: str = "<memory>") -> AdvDocument:
     _resolve_section_ranges(data, doc)
     _parse_main_model(data, doc)
     _carve_previews(data, doc)
+    _extract_clouds(data, doc)
     return doc
 
 
@@ -146,6 +147,15 @@ def _assign_metadata(model: MainModel, strings: list[tuple[int, str]]) -> None:
         elif "-" in text and len(text) <= 12 and not model.plan_code \
                 and not text[0].isdigit() and not text.startswith(("Saw", "Pie")):
             model.plan_code = text
+
+
+def _extract_clouds(data: bytes, doc: AdvDocument) -> None:
+    """Decode the labeled 3-D point clouds embedded in section 1."""
+    from .clouds import extract_clouds
+    try:
+        doc.clouds = extract_clouds(data, doc)
+    except Exception as exc:                                  # noqa: BLE001
+        doc.warnings.append(f"cloud extraction failed: {exc}")
 
 
 def _carve_previews(data: bytes, doc: AdvDocument) -> None:
