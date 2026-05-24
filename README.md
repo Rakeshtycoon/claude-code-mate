@@ -121,3 +121,39 @@ python -m viewer path\to\Merge0001a.STL path\to\Merge0001c.STL
 | `D` | Start distance measurement |
 | `A` | Start angle measurement |
 | `C` | Clear all measurements |
+
+## Build a standalone Windows `.exe`
+
+The viewer can be packaged as a self-contained Windows executable using
+PyInstaller. The packaged app does **not** need Python or any of the
+listed dependencies installed on the target machine.
+
+> The build itself has to run on Windows — PyInstaller cannot
+> cross-compile a working Windows `.exe` from Linux/macOS.
+
+From the project root in a Windows Command Prompt:
+
+```cmd
+build_exe.bat
+```
+
+The script will:
+
+1. Create a `.venv` if one doesn't exist
+2. Install the runtime requirements + PyInstaller
+3. Run `pyinstaller --clean --noconfirm viewer.spec`
+4. Print the path to the built `.exe`
+
+The final layout is:
+
+```
+dist\STL-TO-STN-Viewer\
+    STL-TO-STN-Viewer.exe   <- launch this
+    _internal\              <- DLLs, VTK data, PySide plugins
+```
+
+Distribute the **whole `STL-TO-STN-Viewer` folder** (or zip it). The
+`.exe` needs the sibling `_internal` folder to run.
+
+Expected build time: 2-5 minutes. Expected folder size: ~400-600 MB
+(VTK + PySide6 are large; this is normal for a Qt/VTK app).
