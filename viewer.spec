@@ -22,11 +22,12 @@ hidden = (
     + pvqt_hidden
     + vtk_hidden
     + collect_submodules("vtkmodules")
+    + collect_submodules("viewer")
     + ["pkg_resources.py2_warn"]
 )
 
 a = Analysis(
-    ["viewer/__main__.py"],
+    ["run_viewer.py"],
     pathex=["."],
     binaries=pv_bins + pvqt_bins + vtk_bins,
     datas=pv_data + pvqt_data + vtk_data,
