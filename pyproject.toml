@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stl-to-stn"
+version = "0.1.0"
+description = "Convert STL (ASCII or binary) mesh files into the STN JSON format."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "claude-code-mate" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[project.scripts]
+stl-to-stn = "stl_to_stn.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["stl_to_stn*"]
