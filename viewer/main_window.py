@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import List, Optional
 
 import pyvista as pv
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QSplitter,
     QStatusBar,
@@ -19,6 +20,9 @@ from PySide6.QtWidgets import (
 from .scene import LoadedMesh, color_for_index
 from .side_panel import SidePanel
 from .viewport import Viewport, angle_degrees, distance
+
+
+RECENT_FILES_MAX = 10
 
 
 class MainWindow(QMainWindow):
@@ -34,6 +38,9 @@ class MainWindow(QMainWindow):
         self._measure_mode: Optional[str] = None  # "distance" | "angle" | None
         self._pending_points: list[tuple] = []
         self._measurement_counter = 0
+
+        self._settings = QSettings("STL TO STN", "Viewer")
+        self._recent: list[str] = self._load_recent_files()
 
         self._build_ui()
         self._build_menu()
@@ -68,12 +75,17 @@ class MainWindow(QMainWindow):
     def _build_menu(self) -> None:
         mb = self.menuBar()
 
+        # ---- File menu --------------------------------------------------
         file_menu = mb.addMenu("&File")
         act_open = QAction("&Open STL…", self)
         act_open.setShortcut(QKeySequence.Open)
         act_open.triggered.connect(self._open_dialog)
         file_menu.addAction(act_open)
 
+        self.recent_menu: QMenu = file_menu.addMenu("Open &recent")
+        self._refresh_recent_menu()
+
+        file_menu.addSeparator()
         act_screenshot = QAction("Save &screenshot…", self)
         act_screenshot.setShortcut("Ctrl+S")
         act_screenshot.triggered.connect(self._save_screenshot)
@@ -85,6 +97,7 @@ class MainWindow(QMainWindow):
         act_exit.triggered.connect(self.close)
         file_menu.addAction(act_exit)
 
+        # ---- View menu --------------------------------------------------
         view_menu = mb.addMenu("&View")
         act_reset = QAction("&Reset view (isometric)", self)
         act_reset.setShortcut("R")
@@ -95,6 +108,24 @@ class MainWindow(QMainWindow):
         act_fit.setShortcut("F")
         act_fit.triggered.connect(self.viewport.fit_view)
         view_menu.addAction(act_fit)
+
+        # Camera presets (Ctrl+1 .. Ctrl+7).
+        camera_menu = view_menu.addMenu("&Camera preset")
+        for label, shortcut, view in (
+            ("&Front",        "Ctrl+1", "front"),
+            ("&Back",         "Ctrl+2", "back"),
+            ("&Top",          "Ctrl+3", "top"),
+            ("Botto&m",       "Ctrl+4", "bottom"),
+            ("&Left",         "Ctrl+5", "left"),
+            ("Ri&ght",        "Ctrl+6", "right"),
+            ("&Isometric",    "Ctrl+7", "isometric"),
+        ):
+            act = QAction(label, self)
+            act.setShortcut(shortcut)
+            act.triggered.connect(
+                lambda _checked=False, v=view: self.viewport.set_camera_view(v)
+            )
+            camera_menu.addAction(act)
 
         view_menu.addSeparator()
         for mode, label, shortcut in (
@@ -107,6 +138,33 @@ class MainWindow(QMainWindow):
             act.triggered.connect(lambda _checked=False, m=mode: self._set_mode(m))
             view_menu.addAction(act)
 
+        view_menu.addSeparator()
+        self.act_bbox = QAction("Show &bounding box", self, checkable=True)
+        self.act_bbox.setShortcut("B")
+        self.act_bbox.toggled.connect(self.viewport.set_bbox_visible)
+        view_menu.addAction(self.act_bbox)
+
+        self.act_smooth = QAction("&Smooth shading", self, checkable=True)
+        self.act_smooth.setChecked(True)
+        self.act_smooth.setShortcut("Shift+S")
+        self.act_smooth.toggled.connect(self._on_smooth_toggled)
+        view_menu.addAction(self.act_smooth)
+
+        # Lighting presets.
+        light_menu = view_menu.addMenu("&Lighting")
+        for label, preset in (
+            ("&Default (studio)", "default"),
+            ("&Bright",           "bright"),
+            ("Di&m",              "dim"),
+            ("&Headlight",        "headlight"),
+        ):
+            act = QAction(label, self)
+            act.triggered.connect(
+                lambda _checked=False, p=preset: self.viewport.set_lighting(p)
+            )
+            light_menu.addAction(act)
+
+        # ---- Tools menu -------------------------------------------------
         tools_menu = mb.addMenu("&Tools")
         act_dist = QAction("Measure &distance", self)
         act_dist.setShortcut("D")
@@ -163,6 +221,10 @@ class MainWindow(QMainWindow):
         self.side_panel.add_mesh_item(item)
         if len(self._meshes) == 1:
             self.viewport.reset_view()
+        self._add_recent_file(str(p.resolve()))
+        # If the bbox toggle is on, refresh it so it covers the new mesh too.
+        if hasattr(self, "act_bbox") and self.act_bbox.isChecked():
+            self.viewport.set_bbox_visible(True)
         self.status.showMessage(
             f"Loaded {p.name}: {item.triangle_count:,} triangles, "
             f"{item.vertex_count:,} vertices"
@@ -289,3 +351,60 @@ class MainWindow(QMainWindow):
             return
         self.viewport.take_screenshot(path)
         self.status.showMessage(f"Screenshot saved to {path}")
+
+    def _on_smooth_toggled(self, checked: bool) -> None:
+        self.viewport.set_smooth_shading(checked)
+        # Re-apply to every loaded mesh.
+        for item in self._meshes:
+            self.viewport.update_appearance(item)
+        self.status.showMessage(
+            "Smooth shading: ON" if checked else "Smooth shading: OFF"
+        )
+
+    # ------------------------------------------------------------------
+    # Recent files (persisted via QSettings)
+    # ------------------------------------------------------------------
+
+    def _load_recent_files(self) -> list[str]:
+        raw = self._settings.value("recent_files", [])
+        if isinstance(raw, str):
+            raw = [raw]
+        if not isinstance(raw, list):
+            return []
+        return [str(p) for p in raw if p and Path(str(p)).exists()]
+
+    def _save_recent_files(self) -> None:
+        self._settings.setValue("recent_files", self._recent)
+
+    def _add_recent_file(self, path: str) -> None:
+        if path in self._recent:
+            self._recent.remove(path)
+        self._recent.insert(0, path)
+        self._recent = self._recent[:RECENT_FILES_MAX]
+        self._save_recent_files()
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self) -> None:
+        self.recent_menu.clear()
+        if not self._recent:
+            empty = QAction("(no recent files)", self)
+            empty.setEnabled(False)
+            self.recent_menu.addAction(empty)
+            return
+        for path in self._recent:
+            p = Path(path)
+            label = f"{p.name}  —  {p.parent}"
+            act = QAction(label, self)
+            act.setToolTip(str(p))
+            act.triggered.connect(lambda _checked=False, x=path: self.load_file(x))
+            self.recent_menu.addAction(act)
+        self.recent_menu.addSeparator()
+        clear = QAction("Clear list", self)
+        clear.triggered.connect(self._clear_recent_files)
+        self.recent_menu.addAction(clear)
+
+    def _clear_recent_files(self) -> None:
+        self._recent = []
+        self._save_recent_files()
+        self._refresh_recent_menu()
+        self.status.showMessage("Recent files list cleared.")

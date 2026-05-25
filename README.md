@@ -118,9 +118,16 @@ python -m viewer path\to\Merge0001a.STL path\to\Merge0001c.STL
 | `R` | Reset view (isometric) |
 | `F` | Fit to screen |
 | `1` / `2` / `3` | Solid / wireframe / points |
+| `Ctrl+1` – `Ctrl+7` | Camera presets: Front, Back, Top, Bottom, Left, Right, Isometric |
+| `B` | Toggle bounding-box outline |
+| `Shift+S` | Toggle smooth shading |
 | `D` | Start distance measurement |
 | `A` | Start angle measurement |
 | `C` | Clear all measurements |
+
+`File → Open recent` keeps the last 10 files you loaded across sessions,
+and `View → Lighting` swaps between Default / Bright / Dim / Headlight
+presets.
 
 ## Build a standalone Windows `.exe`
 

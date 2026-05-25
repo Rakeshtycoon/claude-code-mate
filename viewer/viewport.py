@@ -83,6 +83,7 @@ class Viewport(QWidget):
         layout.addWidget(self.plotter.interactor)
 
         self._render_mode = "surface"  # surface | wireframe | points
+        self._smooth_shading = True
         self._pick_callback: Optional[Callable[[tuple], None]] = None
 
         # Install a permanent click filter; it only acts while
@@ -106,7 +107,7 @@ class Viewport(QWidget):
             color=item.color,
             opacity=item.opacity,
             style=style,
-            smooth_shading=True,
+            smooth_shading=self._smooth_shading,
             name=str(id(item)),
             show_scalar_bar=False,
             lighting=True,
@@ -151,8 +152,114 @@ class Viewport(QWidget):
             return
         self._render_mode = mode
 
+    def set_camera_view(self, view: str) -> None:
+        """Snap the camera to a standard orthographic view."""
+        p = self.plotter
+        view = view.lower()
+        # PyVista's view_* methods orient the camera along an axis.
+        if view == "front":
+            p.view_xz()
+        elif view == "back":
+            p.view_xz(negative=True)
+        elif view == "top":
+            p.view_xy()
+        elif view == "bottom":
+            p.view_xy(negative=True)
+        elif view == "left":
+            p.view_yz()
+        elif view == "right":
+            p.view_yz(negative=True)
+        elif view == "isometric":
+            p.view_isometric()
+        else:
+            return
+        p.reset_camera()
+        p.render()
+
     def take_screenshot(self, path: str) -> None:
         self.plotter.screenshot(path)
+
+    # ------------------------------------------------------------------
+    # Display toggles
+    # ------------------------------------------------------------------
+
+    _BBOX_NAME = "_viewer_bbox_outline"
+
+    def set_bbox_visible(self, visible: bool) -> None:
+        """Show or hide a grey wireframe around the loaded meshes' bounds."""
+        if visible:
+            if self._BBOX_NAME in self.plotter.actors:
+                # Refresh in case bounds changed since last toggle.
+                self.plotter.remove_actor(self._BBOX_NAME)
+            bounds = self.plotter.bounds
+            if bounds is None:
+                self.plotter.render()
+                return
+            box = pv.Box(bounds=tuple(bounds), level=0)
+            actor = self.plotter.add_mesh(
+                box,
+                style="wireframe",
+                color="#888888",
+                line_width=1,
+                name=self._BBOX_NAME,
+                lighting=False,
+            )
+            try:
+                actor.SetPickable(False)
+            except Exception:
+                pass
+        else:
+            if self._BBOX_NAME in self.plotter.actors:
+                self.plotter.remove_actor(self._BBOX_NAME)
+        self.plotter.render()
+
+    def set_smooth_shading(self, smooth: bool) -> None:
+        """Toggle Gouraud-style smooth shading on all loaded meshes."""
+        self._smooth_shading = bool(smooth)
+        # Re-add every visible mesh so the new shading takes effect.
+        # The caller is responsible for iterating; we expose the flag
+        # via `_smooth_shading` and let the main window trigger refresh.
+
+    def set_lighting(self, preset: str) -> None:
+        """Switch to one of a few canned lighting setups."""
+        p = self.plotter
+        try:
+            p.remove_all_lights()
+        except Exception:
+            pass
+
+        preset = preset.lower()
+        if preset == "bright":
+            for pos, intensity in (
+                ((1, 1, 1), 1.0),
+                ((-1, 1, 0.5), 0.6),
+                ((0, -1, 0.5), 0.5),
+            ):
+                p.add_light(
+                    pv.Light(
+                        position=pos, focal_point=(0, 0, 0), intensity=intensity
+                    )
+                )
+        elif preset == "dim":
+            p.add_light(
+                pv.Light(
+                    position=(1, 1, 1), focal_point=(0, 0, 0), intensity=0.5
+                )
+            )
+        elif preset == "headlight":
+            p.add_light(pv.Light(light_type="headlight", intensity=0.9))
+        else:  # "default" / "studio"
+            for pos, intensity in (
+                ((1, 1, 1), 0.7),
+                ((-1, 0, 0.5), 0.4),
+                ((0, -1, 0.3), 0.3),
+            ):
+                p.add_light(
+                    pv.Light(
+                        position=pos, focal_point=(0, 0, 0), intensity=intensity
+                    )
+                )
+        p.render()
 
     # ------------------------------------------------------------------
     # Measurement workflow
