@@ -8,11 +8,62 @@ from typing import Callable, Optional
 import numpy as np
 import pyvista as pv
 import vtk
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 from pyvistaqt import QtInteractor
 
 from .scene import LoadedMesh
+
+
+class _PickEventFilter(QObject):
+    """Qt event filter that turns left-click (not drag) into a pick.
+
+    PyVista's built-in picking helpers and direct VTK observers both
+    proved unreliable under pyvistaqt because Qt sometimes consumes
+    mouse events before VTK ever sees them. Hooking at the Qt level
+    is the most dependable: we always see the press/release pair.
+    """
+
+    def __init__(self, viewport: "Viewport") -> None:
+        super().__init__()
+        self._viewport = viewport
+        self._press_pos: Optional[tuple[int, int]] = None
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt naming)
+        viewport = self._viewport
+        if viewport._pick_callback is None:
+            return False
+
+        try:
+            et = event.type()
+        except Exception:
+            return False
+
+        if et == QEvent.MouseButtonPress:
+            try:
+                if event.button() == Qt.LeftButton:
+                    pos = event.position()
+                    self._press_pos = (int(pos.x()), int(pos.y()))
+            except Exception:
+                self._press_pos = None
+        elif et == QEvent.MouseButtonRelease:
+            try:
+                if event.button() != Qt.LeftButton:
+                    return False
+                press = self._press_pos
+                self._press_pos = None
+                if press is None:
+                    return False
+                pos = event.position()
+                x_qt = int(pos.x())
+                y_qt = int(pos.y())
+                # > 4 px movement = drag (rotation), not a click.
+                if abs(x_qt - press[0]) > 4 or abs(y_qt - press[1]) > 4:
+                    return False
+                viewport._do_vtk_pick(watched, x_qt, y_qt)
+            except Exception:
+                pass
+        return False  # never consume — let the rotate/zoom style still work
 
 
 class Viewport(QWidget):
@@ -27,18 +78,20 @@ class Viewport(QWidget):
         self.plotter.show_axes()
         self.plotter.enable_anti_aliasing("msaa")
 
-        from PySide6.QtWidgets import QVBoxLayout
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.plotter.interactor)
 
         self._render_mode = "surface"  # surface | wireframe | points
         self._pick_callback: Optional[Callable[[tuple], None]] = None
-        self._press_pos: Optional[tuple[int, int]] = None
-        self._press_observer_id: Optional[int] = None
-        self._release_observer_id: Optional[int] = None
-        self._raw_iren = None
+
+        # Install a permanent click filter; it only acts while
+        # `_pick_callback` is set.
+        self._pick_filter = _PickEventFilter(self)
+        try:
+            self.plotter.interactor.installEventFilter(self._pick_filter)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Mesh management
@@ -102,94 +155,94 @@ class Viewport(QWidget):
         self.plotter.screenshot(path)
 
     # ------------------------------------------------------------------
-    # Measurement overlay
+    # Measurement workflow
     # ------------------------------------------------------------------
 
     def enable_point_picking(self, callback: Callable[[tuple], None]) -> None:
-        """Enable left-click surface picking.
-
-        Uses direct VTK observers instead of PyVista's enable_*_picking
-        helpers, which proved unreliable: they could leave behind a red
-        rubber-band rectangle and their callback signature changed
-        between versions. With this approach the interaction is exactly:
-
-        * Left-click without movement = pick a surface point (callback).
-        * Left-click and drag         = rotate the camera (untouched).
-        """
+        """Arm the click filter to call `callback((x,y,z))` on left-click."""
         self._pick_callback = callback
-        self._press_pos = None
-
-        raw_iren = self.plotter.iren
-        if hasattr(raw_iren, "interactor"):
-            raw_iren = raw_iren.interactor
-        self._raw_iren = raw_iren
-
-        def _on_press(obj, _event):
-            try:
-                self._press_pos = obj.GetEventPosition()
-            except Exception:
-                self._press_pos = None
-
-        def _on_release(obj, _event):
-            press = self._press_pos
-            self._press_pos = None
-            if press is None or self._pick_callback is None:
-                return
-            try:
-                x, y = obj.GetEventPosition()
-            except Exception:
-                return
-            # Treat any movement > 4 px as a drag (rotation), not a click.
-            if abs(x - press[0]) > 4 or abs(y - press[1]) > 4:
-                return
-
-            picker = vtk.vtkCellPicker()
-            picker.SetTolerance(0.005)
-            renderer = self.plotter.renderer
-            if picker.Pick(x, y, 0, renderer):
-                world = picker.GetPickPosition()
-                self._pick_callback(
-                    (float(world[0]), float(world[1]), float(world[2]))
-                )
-
-        self._press_observer_id = raw_iren.AddObserver(
-            "LeftButtonPressEvent", _on_press
-        )
-        self._release_observer_id = raw_iren.AddObserver(
-            "LeftButtonReleaseEvent", _on_release
-        )
 
     def disable_point_picking(self) -> None:
-        if self._raw_iren is not None:
-            if self._press_observer_id is not None:
-                self._raw_iren.RemoveObserver(self._press_observer_id)
-            if self._release_observer_id is not None:
-                self._raw_iren.RemoveObserver(self._release_observer_id)
-        self._press_observer_id = None
-        self._release_observer_id = None
         self._pick_callback = None
-        self._press_pos = None
+
+    def _do_vtk_pick(self, watched, x_qt: int, y_qt: int) -> None:
+        """Run a vtkCellPicker for the given Qt click position."""
+        if self._pick_callback is None:
+            return
+
+        renderer = None
+        for getter in (
+            lambda: self.plotter.renderer,
+            lambda: self.plotter.renderers[0],
+        ):
+            try:
+                renderer = getter()
+                if renderer is not None:
+                    break
+            except Exception:
+                continue
+        if renderer is None:
+            return
+
+        # VTK uses physical pixels with bottom-left origin; Qt gives us
+        # logical pixels with top-left origin. Convert.
+        try:
+            dpr = float(watched.devicePixelRatioF())
+        except Exception:
+            dpr = 1.0
+        try:
+            ren_size = renderer.GetSize()  # (width, height) in physical px
+            height_phys = int(ren_size[1])
+        except Exception:
+            height_phys = int(watched.height() * dpr)
+
+        vtk_x = int(round(x_qt * dpr))
+        vtk_y = height_phys - int(round(y_qt * dpr))
+
+        picker = vtk.vtkCellPicker()
+        picker.SetTolerance(0.01)
+        if picker.Pick(vtk_x, vtk_y, 0, renderer):
+            world = picker.GetPickPosition()
+            self._pick_callback(
+                (float(world[0]), float(world[1]), float(world[2]))
+            )
+
+    # ------------------------------------------------------------------
+    # Overlay actors (markers, lines, labels)
+    # ------------------------------------------------------------------
 
     def add_marker(self, point: tuple, name: str) -> None:
         sphere = pv.Sphere(radius=self._marker_radius(), center=point)
-        self.plotter.add_mesh(
+        actor = self.plotter.add_mesh(
             sphere, color="#FFD24A", name=name, lighting=False
         )
+        # Don't let picker re-pick our own marker on the next click.
+        try:
+            actor.SetPickable(False)
+        except Exception:
+            pass
 
     def add_line(self, a: tuple, b: tuple, name: str, label: str) -> None:
         line = pv.Line(a, b)
-        self.plotter.add_mesh(line, color="#FFD24A", line_width=3, name=name)
-        mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
-        self.plotter.add_point_labels(
-            [mid],
-            [label],
-            name=f"{name}-label",
-            font_size=14,
-            point_size=1,
-            text_color="#FFD24A",
-            shape=None,
-            always_visible=True,
+        actor = self.plotter.add_mesh(
+            line, color="#FFD24A", line_width=3, name=name
         )
+        try:
+            actor.SetPickable(False)
+        except Exception:
+            pass
+        if label:
+            mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+            self.plotter.add_point_labels(
+                [mid],
+                [label],
+                name=f"{name}-label",
+                font_size=14,
+                point_size=1,
+                text_color="#FFD24A",
+                shape=None,
+                always_visible=True,
+            )
 
     def add_angle(
         self, a: tuple, vertex: tuple, c: tuple, name: str, label: str
@@ -214,7 +267,7 @@ class Viewport(QWidget):
         self.plotter.render()
 
     # ------------------------------------------------------------------
-    # Internal
+    # Internal helpers
     # ------------------------------------------------------------------
 
     def _marker_radius(self) -> float:
