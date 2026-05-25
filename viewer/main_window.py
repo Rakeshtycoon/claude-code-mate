@@ -143,7 +143,8 @@ class MainWindow(QMainWindow):
         meta = item.model.metadata
         self.status.showMessage(
             f"Loaded {p.name}: part={meta.part_number or '—'}, "
-            f"{item.sample_count:,} samples, Stone v{meta.producer_version or '?'}"
+            f"{item.point_count:,} points in {item.chunk_count} chunks, "
+            f"Stone v{meta.producer_version or '?'}"
         )
 
     def _on_file_removed(self, item: LoadedStn) -> None:

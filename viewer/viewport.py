@@ -1,4 +1,4 @@
-"""PyVista-based 3D viewport widget for STN heightfields."""
+"""PyVista-based 3D viewport widget for STN scans."""
 
 from __future__ import annotations
 
@@ -31,37 +31,33 @@ class Viewport(QWidget):
     # ------------------------------------------------------------------
 
     def add_loaded_file(self, item: LoadedStn) -> None:
-        if not item.has_mesh:
-            return
-        style = {"surface": "surface", "wireframe": "wireframe", "points": "points"}[
-            self._render_mode
-        ]
-        actor = self.plotter.add_mesh(
-            item.mesh,
-            color=item.color,
-            opacity=item.opacity,
-            style=style,
-            smooth_shading=True,
-            name=str(id(item)),
-            show_scalar_bar=False,
-            lighting=True,
-        )
-        item.actor = actor
+        self._add_point_cloud_actor(item)
+        self._add_heightmap_actor(item)
 
     def remove_loaded_file(self, item: LoadedStn) -> None:
-        if item.actor is not None:
-            self.plotter.remove_actor(item.actor)
-            item.actor = None
+        for attr in ("actor_points", "actor_surface"):
+            actor = getattr(item, attr)
+            if actor is not None:
+                self.plotter.remove_actor(actor)
+                setattr(item, attr, None)
 
     def update_visibility(self, item: LoadedStn) -> None:
-        if item.actor is None and item.visible:
-            self.add_loaded_file(item)
-        elif item.actor is not None:
-            item.actor.SetVisibility(bool(item.visible))
-            self.plotter.render()
+        if item.visible:
+            if item.actor_points is None and item.show_points:
+                self._add_point_cloud_actor(item)
+            if item.actor_surface is None and item.show_surface:
+                self._add_heightmap_actor(item)
+            for actor in (item.actor_points, item.actor_surface):
+                if actor is not None:
+                    actor.SetVisibility(True)
+        else:
+            for actor in (item.actor_points, item.actor_surface):
+                if actor is not None:
+                    actor.SetVisibility(False)
+        self.plotter.render()
 
     def update_appearance(self, item: LoadedStn) -> None:
-        """Re-add the mesh so color/opacity/style changes take effect."""
+        """Re-add actors so color / opacity / style changes take effect."""
         was_visible = item.visible
         self.remove_loaded_file(item)
         if was_visible:
@@ -92,3 +88,40 @@ class Viewport(QWidget):
     def closeEvent(self, event):  # noqa: N802 (Qt naming)
         self.plotter.close()
         super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _add_point_cloud_actor(self, item: LoadedStn) -> None:
+        if item.point_cloud is None or not item.show_points:
+            return
+        item.actor_points = self.plotter.add_mesh(
+            item.point_cloud,
+            color=item.color,
+            opacity=min(1.0, item.opacity + 0.1),
+            point_size=4.0,
+            render_points_as_spheres=True,
+            name=f"{id(item)}-points",
+            show_scalar_bar=False,
+            lighting=False,
+        )
+
+    def _add_heightmap_actor(self, item: LoadedStn) -> None:
+        if item.heightmap is None or not item.show_surface:
+            return
+        style = {
+            "surface": "surface",
+            "wireframe": "wireframe",
+            "points": "points",
+        }[self._render_mode]
+        item.actor_surface = self.plotter.add_mesh(
+            item.heightmap,
+            color=item.color,
+            opacity=item.opacity * 0.55,
+            style=style,
+            smooth_shading=True,
+            name=f"{id(item)}-surface",
+            show_scalar_bar=False,
+            lighting=True,
+        )

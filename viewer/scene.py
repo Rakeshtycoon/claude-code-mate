@@ -1,13 +1,16 @@
 """Per-file state container for the STN viewer.
 
-A LoadedStn wraps the parsed :class:`StnModel` together with a PyVista
-mesh reconstructed from the file's quantised heightfield body, so the
-viewport can treat each file uniformly.
+A :class:`LoadedStn` wraps the parsed model plus PyVista geometry built
+from two parts of the .stn body:
+
+* the float32 point-cloud chunks decoded directly from real coordinates,
+* the quantised u16 heightfield, reshaped into a square-ish grid for a
+  surface preview (until the exact 2-D layout is fully pinned down).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -15,8 +18,8 @@ import numpy as np
 import pyvista as pv
 
 from stn_reader.parser import (
-    NO_DATA_SENTINEL_U16,
     StnModel,
+    decode_heightfield,
     parse_stn_file,
 )
 
@@ -36,65 +39,51 @@ def color_for_index(index: int) -> str:
     return _PALETTE[index % len(_PALETTE)]
 
 
-def _reconstruct_heightfield(
-    raw_bytes: bytes, body_offset: int
+def _build_point_cloud_mesh(points: np.ndarray) -> Optional[pv.PolyData]:
+    if points.size == 0:
+        return None
+    cloud = pv.PolyData(points.astype(np.float32, copy=False))
+    cloud.point_data["z"] = points[:, 2].astype(np.float32, copy=False)
+    return cloud
+
+
+def _build_heightfield_mesh(
+    raw_bytes: bytes, offset: int, size: int
 ) -> Optional[pv.StructuredGrid]:
-    """Best-effort heightmap from the .stn body.
-
-    The exact 2-D layout of the body is still being reverse-engineered, so
-    we decode every u16 sample, mask the no-data sentinel, then reshape
-    into the closest-to-square grid that exactly fits. This produces a
-    visually meaningful preview even before the true grid dimensions are
-    pinned down.
-    """
-    body = raw_bytes[body_offset:]
-    if len(body) < 64:
+    if size < 64:
+        return None
+    samples = decode_heightfield(raw_bytes, offset, size)
+    if samples.size < 16:
         return None
 
-    samples = np.frombuffer(body[: len(body) // 2 * 2], dtype="<u2").astype(
-        np.float32
-    )
-    if samples.size == 0:
-        return None
-
-    # Cap to keep the viewport responsive on large scans.
-    cap = 1_500_000
-    if samples.size > cap:
-        samples = samples[:cap]
-
-    # Reshape: pick the divisor of N closest to sqrt(N) for a square-ish grid.
+    # Reshape to a clean (height, width) grid by trimming trailing
+    # samples down to a near-square factorisation.
     n = samples.size
     side = int(np.sqrt(n))
-    width = side
+    width = max(side, 1)
     while width > 1 and n % width != 0:
         width -= 1
     if width <= 1:
-        # Force a clean shape by trimming trailing samples.
         width = side
         n = width * width
         samples = samples[:n]
     height = n // width
-
     grid = samples.reshape(height, width)
 
-    # Mask the no-data sentinel, then normalise so the height range is
-    # ~order of the XY extent (otherwise the surface is razor-thin).
-    mask = grid == NO_DATA_SENTINEL_U16
-    valid = grid[~mask]
+    valid = grid[~np.isnan(grid)]
     if valid.size < 4:
         return None
     lo, hi = float(valid.min()), float(valid.max())
     rng = hi - lo if hi > lo else 1.0
     target_z = 0.25 * max(width, height)
     z = (grid - lo) / rng * target_z
-    z[mask] = np.nan
 
     xs = np.arange(width, dtype=np.float32)
     ys = np.arange(height, dtype=np.float32)
     xx, yy = np.meshgrid(xs, ys)
 
-    structured = pv.StructuredGrid(xx, yy, z)
-    structured.point_data["height"] = z.ravel(order="F")
+    structured = pv.StructuredGrid(xx, yy, z.astype(np.float32))
+    structured.point_data["height"] = z.ravel(order="F").astype(np.float32)
     return structured
 
 
@@ -105,36 +94,48 @@ class LoadedStn:
     name: str
     path: Path
     model: StnModel
-    mesh: Optional[pv.StructuredGrid]
+    point_cloud: Optional[pv.PolyData]
+    heightmap: Optional[pv.StructuredGrid]
     color: str
     opacity: float = 1.0
     visible: bool = True
-    actor: object = None  # set by viewport after add_mesh
+    show_points: bool = True
+    show_surface: bool = True
+    actor_points: object = None
+    actor_surface: object = None
 
     @classmethod
     def from_path(cls, path: Path, index: int) -> "LoadedStn":
         model = parse_stn_file(path)
         raw = path.read_bytes()
-        mesh = _reconstruct_heightfield(raw, model.body_offset)
+        pc_mesh = _build_point_cloud_mesh(model.point_cloud.points)
+        hf_mesh = _build_heightfield_mesh(
+            raw, model.heightfield_offset, model.heightfield_size
+        )
         return cls(
             name=path.name,
             path=path,
             model=model,
-            mesh=mesh,
+            point_cloud=pc_mesh,
+            heightmap=hf_mesh,
             color=color_for_index(index),
         )
 
     @property
-    def has_mesh(self) -> bool:
-        return self.mesh is not None and self.mesh.n_points > 0
+    def point_count(self) -> int:
+        return self.model.point_cloud.point_count
 
     @property
-    def grid_shape(self) -> tuple[int, int]:
-        if self.mesh is None:
+    def chunk_count(self) -> int:
+        return self.model.point_cloud.chunk_count
+
+    @property
+    def heightmap_dims(self) -> tuple[int, int]:
+        if self.heightmap is None:
             return (0, 0)
-        dims = self.mesh.dimensions  # (i, j, k)
+        dims = self.heightmap.dimensions
         return (int(dims[0]), int(dims[1]))
 
     @property
-    def sample_count(self) -> int:
-        return 0 if self.mesh is None else int(self.mesh.n_points)
+    def bounds(self) -> tuple[float, float, float, float, float, float]:
+        return self.model.point_cloud.bounds

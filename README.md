@@ -18,26 +18,48 @@ produced by the "Stone" CMM/inspection toolchain. Companion to the
 ## What is `.stn`?
 
 `.stn` is a proprietary binary scan format. Reverse-engineered from
-sample files:
+the four sample files in this repo (produced by **Stone v5.3.0.165**):
 
-| Offset    | Type       | Meaning                                                    |
-|-----------|------------|------------------------------------------------------------|
-| 0         | u32 LE     | Magic = `0x00000937`                                       |
-| 4         | u32 LE     | File ID / hash                                             |
-| 8         | u32 LE     | Creation marker                                            |
-| 16        | f64        | Scale factor                                               |
-| 48        | u32 LE     | Width count                                                |
-| 52        | u32 LE     | Format constant = `61200`                                  |
-| 56        | u32 LE     | Height count                                               |
-| 213       | u32 + str  | Part number (length-prefixed ASCII)                        |
-| 237       | u32 + str  | Quality tag, e.g. `"Most Accurate"`                        |
-| 256..end  | u16 LE[]   | Quantised height samples; `0x6F7D` = no-data sentinel      |
-| tail      | ASCII      | `(StoneTextualData: PrivateBuild N Date d.m.y h:m:s Version:x.y.z.b)` |
+### Header (fixed offsets)
 
-Sample files in this repo were produced by **Stone v5.3.0.165**. The
-exact 2-D layout of the body is still being confirmed; the viewer
-currently reconstructs a square-ish heightmap from the decoded samples
-to give a meaningful preview.
+| Offset   | Type       | Meaning                                                  |
+|----------|------------|----------------------------------------------------------|
+| 0        | u32 LE     | Magic = `0x00000937`                                     |
+| 4        | u32 LE     | File ID / hash                                           |
+| 8        | u32 LE     | Creation marker                                          |
+| 16       | f64        | Scale factor                                             |
+| 48       | u32 LE     | Width count                                              |
+| 52       | u32 LE     | Format constant = `61200`                                |
+| 56       | u32 LE     | Height count                                             |
+| 213      | u32 + str  | Part number (length-prefixed ASCII)                      |
+| 237      | u32 + str  | Quality tag, e.g. `"Most Accurate"`                      |
+
+### Body
+
+* **Quantised u16 heightfield** — starts around offset 350 and runs
+  until the float-chunk region begins. The value `0x6F7D` marks a
+  no-data pixel. The exact 2-D layout is still being confirmed; the
+  viewer reshapes it into a near-square preview surface.
+* **Float32 XYZ point-cloud section** — a run of contiguous chunks
+  near the file tail. Each chunk has the layout:
+
+  ```text
+  uint16   chunk index / id
+  uint16   constant marker 0xFFFC
+  uint8    constant marker 0x01
+  uint32   point count N
+  float32  xyz[N]            (N * 12 bytes)
+  ```
+
+  All four sample files contain exactly 32 such chunks (4-8 K points
+  total) in real-world millimetre coordinates. These are rendered
+  directly in the viewer as a 3-D point cloud over the heightmap.
+
+### Trailer
+
+ASCII metadata records of the form
+`(StoneTextualData: PrivateBuild N Date d.m.y h:m:s Version:x.y.z.b)`,
+one per save event.
 
 ## Project layout
 

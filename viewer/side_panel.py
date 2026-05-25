@@ -91,12 +91,25 @@ class SidePanel(QWidget):
         pf.addRow("Build dates:", self.lbl_builds)
         root.addWidget(self.producer_box)
 
-        # Mesh preview ------------------------------------------------------
+        # Point cloud -------------------------------------------------------
+        self.points_box = QGroupBox("Point cloud (float32 chunks)")
+        pcf = QFormLayout(self.points_box)
+        self.lbl_chunks = QLabel("—")
+        self.lbl_points = QLabel("—")
+        self.lbl_xrange = QLabel("—")
+        self.lbl_yrange = QLabel("—")
+        self.lbl_zrange = QLabel("—")
+        pcf.addRow("Chunks:", self.lbl_chunks)
+        pcf.addRow("Points:", self.lbl_points)
+        pcf.addRow("X range:", self.lbl_xrange)
+        pcf.addRow("Y range:", self.lbl_yrange)
+        pcf.addRow("Z range:", self.lbl_zrange)
+        root.addWidget(self.points_box)
+
+        # Heightfield -------------------------------------------------------
         self.mesh_box = QGroupBox("Heightfield preview")
         mf = QFormLayout(self.mesh_box)
-        self.lbl_samples = QLabel("—")
         self.lbl_grid = QLabel("—")
-        mf.addRow("Samples:", self.lbl_samples)
         mf.addRow("Grid shape:", self.lbl_grid)
         root.addWidget(self.mesh_box)
 
@@ -161,8 +174,17 @@ class SidePanel(QWidget):
         else:
             self.lbl_builds.setText("—")
 
-        self.lbl_samples.setText(f"{item.sample_count:,}")
-        gw, gh = item.grid_shape
+        self.lbl_chunks.setText(f"{item.chunk_count}")
+        self.lbl_points.setText(f"{item.point_count:,}")
+        xmin, xmax, ymin, ymax, zmin, zmax = item.bounds
+        if item.point_count > 0:
+            self.lbl_xrange.setText(f"{xmin:.2f} … {xmax:.2f}")
+            self.lbl_yrange.setText(f"{ymin:.2f} … {ymax:.2f}")
+            self.lbl_zrange.setText(f"{zmin:.2f} … {zmax:.2f}")
+        else:
+            for lbl in (self.lbl_xrange, self.lbl_yrange, self.lbl_zrange):
+                lbl.setText("—")
+        gw, gh = item.heightmap_dims
         self.lbl_grid.setText(f"{gw} × {gh}" if gw else "—")
 
     def _clear_metadata(self) -> None:
@@ -175,7 +197,11 @@ class SidePanel(QWidget):
             self.lbl_dims,
             self.lbl_version,
             self.lbl_builds,
-            self.lbl_samples,
+            self.lbl_chunks,
+            self.lbl_points,
+            self.lbl_xrange,
+            self.lbl_yrange,
+            self.lbl_zrange,
             self.lbl_grid,
         ):
             lbl.setText("—")
