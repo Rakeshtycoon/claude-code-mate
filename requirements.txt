@@ -1,0 +1,2 @@
+# Runtime dependencies for STN READER.
+# Tkinter ships with the standard Python installer, so no runtime deps yet.
