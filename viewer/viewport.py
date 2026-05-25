@@ -103,15 +103,30 @@ class Viewport(QWidget):
     def enable_point_picking(self, callback: Callable[[tuple], None]) -> None:
         self._pick_callback = callback
 
-        def _on_pick(point, picker):
+        def _on_pick(*args):
+            # PyVista has varied this callback signature across versions; in
+            # newer releases it's just `callback(point)`, in older ones it
+            # also passes the vtk picker. Be tolerant of both.
+            if not args:
+                return
+            point = args[0]
             if point is None:
                 return
-            self._pick_callback((float(point[0]), float(point[1]), float(point[2])))
+            self._pick_callback(
+                (float(point[0]), float(point[1]), float(point[2]))
+            )
 
+        # `left_clicking=True` makes a regular left mouse click pick a
+        # surface point. While picking is enabled, left-drag no longer
+        # rotates the camera — that's fine because we disable picking
+        # the moment the measurement collects all required points.
         self.plotter.enable_surface_point_picking(
             callback=_on_pick,
             show_message=False,
-            show_point=False,
+            show_point=True,
+            point_size=10,
+            color="#FFD24A",
+            left_clicking=True,
         )
 
     def disable_point_picking(self) -> None:
