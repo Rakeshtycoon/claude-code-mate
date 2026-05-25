@@ -7,6 +7,7 @@ from typing import Callable, Optional
 
 import numpy as np
 import pyvista as pv
+import vtk
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget
 from pyvistaqt import QtInteractor
@@ -34,6 +35,10 @@ class Viewport(QWidget):
 
         self._render_mode = "surface"  # surface | wireframe | points
         self._pick_callback: Optional[Callable[[tuple], None]] = None
+        self._press_pos: Optional[tuple[int, int]] = None
+        self._press_observer_id: Optional[int] = None
+        self._release_observer_id: Optional[int] = None
+        self._raw_iren = None
 
     # ------------------------------------------------------------------
     # Mesh management
@@ -101,37 +106,69 @@ class Viewport(QWidget):
     # ------------------------------------------------------------------
 
     def enable_point_picking(self, callback: Callable[[tuple], None]) -> None:
+        """Enable left-click surface picking.
+
+        Uses direct VTK observers instead of PyVista's enable_*_picking
+        helpers, which proved unreliable: they could leave behind a red
+        rubber-band rectangle and their callback signature changed
+        between versions. With this approach the interaction is exactly:
+
+        * Left-click without movement = pick a surface point (callback).
+        * Left-click and drag         = rotate the camera (untouched).
+        """
         self._pick_callback = callback
+        self._press_pos = None
 
-        def _on_pick(*args):
-            # PyVista has varied this callback signature across versions; in
-            # newer releases it's just `callback(point)`, in older ones it
-            # also passes the vtk picker. Be tolerant of both.
-            if not args:
-                return
-            point = args[0]
-            if point is None:
-                return
-            self._pick_callback(
-                (float(point[0]), float(point[1]), float(point[2]))
-            )
+        raw_iren = self.plotter.iren
+        if hasattr(raw_iren, "interactor"):
+            raw_iren = raw_iren.interactor
+        self._raw_iren = raw_iren
 
-        # `left_clicking=True` makes a regular left mouse click pick a
-        # surface point. While picking is enabled, left-drag no longer
-        # rotates the camera — that's fine because we disable picking
-        # the moment the measurement collects all required points.
-        self.plotter.enable_surface_point_picking(
-            callback=_on_pick,
-            show_message=False,
-            show_point=True,
-            point_size=10,
-            color="#FFD24A",
-            left_clicking=True,
+        def _on_press(obj, _event):
+            try:
+                self._press_pos = obj.GetEventPosition()
+            except Exception:
+                self._press_pos = None
+
+        def _on_release(obj, _event):
+            press = self._press_pos
+            self._press_pos = None
+            if press is None or self._pick_callback is None:
+                return
+            try:
+                x, y = obj.GetEventPosition()
+            except Exception:
+                return
+            # Treat any movement > 4 px as a drag (rotation), not a click.
+            if abs(x - press[0]) > 4 or abs(y - press[1]) > 4:
+                return
+
+            picker = vtk.vtkCellPicker()
+            picker.SetTolerance(0.005)
+            renderer = self.plotter.renderer
+            if picker.Pick(x, y, 0, renderer):
+                world = picker.GetPickPosition()
+                self._pick_callback(
+                    (float(world[0]), float(world[1]), float(world[2]))
+                )
+
+        self._press_observer_id = raw_iren.AddObserver(
+            "LeftButtonPressEvent", _on_press
+        )
+        self._release_observer_id = raw_iren.AddObserver(
+            "LeftButtonReleaseEvent", _on_release
         )
 
     def disable_point_picking(self) -> None:
+        if self._raw_iren is not None:
+            if self._press_observer_id is not None:
+                self._raw_iren.RemoveObserver(self._press_observer_id)
+            if self._release_observer_id is not None:
+                self._raw_iren.RemoveObserver(self._release_observer_id)
+        self._press_observer_id = None
+        self._release_observer_id = None
         self._pick_callback = None
-        self.plotter.disable_picking()
+        self._press_pos = None
 
     def add_marker(self, point: tuple, name: str) -> None:
         sphere = pv.Sphere(radius=self._marker_radius(), center=point)
