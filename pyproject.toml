@@ -10,7 +10,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "STN Reader contributors" }]
-dependencies = []
+dependencies = [
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+]
 
 [project.scripts]
 stn-reader = "stn_reader.app:main"
