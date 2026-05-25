@@ -1,25 +1,22 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "stn-reader"
 version = "0.1.0"
-description = "Windows desktop reader for .stn (CAD/3D) files"
+description = "Desktop 3D viewer for Stone .stn scan files."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "STN Reader contributors" }]
-dependencies = [
-    "matplotlib>=3.8",
-    "numpy>=1.26",
+authors = [{ name = "claude-code-mate" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
 ]
 
-[project.scripts]
-stn-reader = "stn_reader.app:main"
-
 [tool.setuptools.packages.find]
-where = ["src"]
+include = ["stn_reader*", "viewer*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
