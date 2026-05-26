@@ -1,27 +1,24 @@
 @echo off
 REM ============================================================
 REM  STN READER Viewer - Windows .exe builder
-REM  Run from the project root in Command Prompt:
+REM
+REM  RUN FROM A COMMAND PROMPT, e.g.:
+REM      cd /d "F:\CONVERTOR PROJECT\stn-reader"
 REM      build_exe.bat
 REM
-REM  Prefers Python 3.11 / 3.12 (best compatibility with PySide6
-REM  and PyVista). Falls back to whatever `python` is on PATH.
+REM  (Double-clicking from Explorer also works because the script
+REM  pauses at the end so the window stays open.)
 REM ============================================================
 
-setlocal enabledelayedexpansion
+setlocal
 
 REM --- Pick the best available Python --------------------------
 set "PY_CMD="
 
-for %%V in (3.12 3.11 3.10 3.9) do (
-    if not defined PY_CMD (
-        py -%%V --version >nul 2>&1
-        if not errorlevel 1 (
-            set "PY_CMD=py -%%V"
-            echo [info] Using Python %%V via py launcher
-        )
-    )
-)
+call :try_pick_python 3.12
+if not defined PY_CMD call :try_pick_python 3.11
+if not defined PY_CMD call :try_pick_python 3.10
+if not defined PY_CMD call :try_pick_python 3.9
 
 if not defined PY_CMD (
     where python >nul 2>&1
@@ -36,27 +33,38 @@ if not defined PY_CMD (
 )
 
 if not defined PY_CMD (
-    echo [ERROR] No Python found on PATH and the 'py' launcher does not know
-    echo         about any 3.9 / 3.10 / 3.11 / 3.12 installation.
+    echo.
+    echo [ERROR] No Python found.
     echo         Install Python 3.11 from
     echo            https://www.python.org/downloads/release/python-3119/
     echo         then re-run this script.
-    exit /b 1
+    goto :end
 )
 
 REM --- Virtual environment -------------------------------------
 if not exist .venv (
-    echo [1/4] Creating virtual environment ^(.venv^)...
+    echo [1/4] Creating virtual environment ^(.venv^) with %PY_CMD%...
     %PY_CMD% -m venv .venv
-    if errorlevel 1 exit /b 1
+    if errorlevel 1 (
+        echo [ERROR] Could not create .venv with %PY_CMD%.
+        goto :end
+    )
 ) else (
     echo [1/4] Reusing existing .venv
 )
 
 call .venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo [ERROR] Could not activate .venv\Scripts\activate.bat
+    goto :end
+)
 
 echo [2/4] Upgrading pip...
-python -m pip install --upgrade pip >nul
+python -m pip install --upgrade pip
+if errorlevel 1 (
+    echo [ERROR] pip upgrade failed.
+    goto :end
+)
 
 echo [3/4] Installing runtime + build dependencies...
 pip install -r requirements-viewer.txt
@@ -64,15 +72,19 @@ if errorlevel 1 (
     echo.
     echo ============================================================
     echo  DEPENDENCY INSTALL FAILED
+    echo.
     echo  Most common cause: Python version not supported by PySide6
     echo  / PyVista yet. Install Python 3.11 from
-    echo    https://www.python.org/downloads/release/python-3119/
+    echo     https://www.python.org/downloads/release/python-3119/
     echo  delete the .venv folder, and re-run this script.
     echo ============================================================
-    exit /b 1
+    goto :end
 )
 pip install "pyinstaller>=6.0"
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo [ERROR] PyInstaller install failed.
+    goto :end
+)
 
 echo [4/4] Running PyInstaller...
 pyinstaller --clean --noconfirm viewer.spec
@@ -81,7 +93,7 @@ if errorlevel 1 (
     echo ============================================================
     echo  BUILD FAILED  - scroll up to see PyInstaller errors.
     echo ============================================================
-    exit /b 1
+    goto :end
 )
 
 set "EXE=dist\STN-Reader\STN-Reader.exe"
@@ -91,13 +103,27 @@ if exist "%EXE%" (
     echo  BUILD SUCCEEDED
     echo  Exe location: %EXE%
     echo.
-    echo  Double-click the .exe inside dist\STN-Reader\
-    echo  to launch the viewer. Distribute the whole folder
-    echo  ^(or zip it^) - the .exe needs the sibling DLLs.
+    echo  Double-click the .exe inside dist\STN-Reader\ to launch.
+    echo  Distribute the WHOLE folder ^(or zip it^).
     echo ============================================================
 ) else (
     echo [ERROR] PyInstaller finished but %EXE% is missing.
-    exit /b 1
 )
 
+:end
+echo.
+echo Press any key to close this window.
+pause >nul
 endlocal
+exit /b
+
+REM ============================================================
+REM  Helper: try one Python version via the py launcher
+REM ============================================================
+:try_pick_python
+    py -%~1 --version >nul 2>&1
+    if not errorlevel 1 (
+        set "PY_CMD=py -%~1"
+        echo [info] Using Python %~1 via py launcher
+    )
+    goto :eof
