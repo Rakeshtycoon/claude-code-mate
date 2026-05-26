@@ -37,8 +37,9 @@ import numpy as np
 
 STN_MAGIC = 0x00000937
 NO_DATA_SENTINEL_U16 = 0x6F7D
+NO_DATA_ZERO_U16 = 0x0000
 
-_HEIGHTFIELD_START = 350
+_HEIGHTFIELD_START = 351
 _CHUNK_MARKER = b"\xfc\xff\x01"
 _CHUNK_MIN_COUNT = 1
 _CHUNK_MAX_COUNT = 5000
@@ -261,8 +262,8 @@ def decode_heightfield(
 ) -> np.ndarray:
     """Decode the quantised u16 heightfield region into a 1-D array.
 
-    The sentinel value 0x6F7D is converted to NaN. Caller decides how to
-    reshape the result (the exact 2-D layout is still being confirmed).
+    Both the explicit sentinel (0x6F7D) and zero pixels are converted to
+    NaN, since both mark "no scan return" in the sample files.
     """
     end = min(offset + size, len(data))
     end -= (end - offset) % 2  # u16 alignment
@@ -270,6 +271,7 @@ def decode_heightfield(
     n = min(len(raw) // 2, max_samples)
     samples = np.frombuffer(raw[: n * 2], dtype="<u2").astype(np.float32)
     samples[samples == NO_DATA_SENTINEL_U16] = np.nan
+    samples[samples == NO_DATA_ZERO_U16] = np.nan
     return samples
 
 
@@ -282,4 +284,5 @@ def extract_heightfield_preview(
     end -= (end - body_offset) % 2
     raw = data[body_offset:end]
     samples = np.frombuffer(raw, dtype="<u2")
-    return samples[samples != NO_DATA_SENTINEL_U16].tolist()
+    mask = (samples != NO_DATA_SENTINEL_U16) & (samples != NO_DATA_ZERO_U16)
+    return samples[mask].tolist()

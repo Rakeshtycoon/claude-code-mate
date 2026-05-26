@@ -115,8 +115,19 @@ class Viewport(QWidget):
             "wireframe": "wireframe",
             "points": "points",
         }[self._render_mode]
+
+        mesh = item.heightmap
+        # Cull no-data cells (the parser flags them as __valid = 0).
+        if "__valid" in mesh.point_data.keys():
+            try:
+                mesh = mesh.threshold(
+                    value=0.5, scalars="__valid", invert=False
+                )
+            except Exception:
+                pass
+
         item.actor_surface = self.plotter.add_mesh(
-            item.heightmap,
+            mesh,
             color=item.color,
             opacity=item.opacity * 0.55,
             style=style,

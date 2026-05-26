@@ -116,23 +116,24 @@ def test_parse_no_chunks(tmp_path: Path) -> None:
     assert model.point_cloud.point_count == 0
 
 
-def test_heightfield_preview_masks_sentinel() -> None:
+def test_heightfield_preview_masks_sentinel_and_zero() -> None:
     body = struct.pack(
-        f"<{6}H", 100, 200, NO_DATA_SENTINEL_U16, 300, NO_DATA_SENTINEL_U16, 400
+        f"<{6}H", 100, 200, NO_DATA_SENTINEL_U16, 300, 0, 400
     )
-    data = b"\x00" * 350 + body
+    data = b"\x00" * 351 + body
     samples = extract_heightfield_preview(data)
     assert samples == [100, 200, 300, 400]
 
 
-def test_decode_heightfield_converts_sentinel_to_nan() -> None:
-    body = struct.pack("<4H", 100, NO_DATA_SENTINEL_U16, 300, 400)
-    data = b"\x00" * 350 + body
-    out = decode_heightfield(data, 350, len(body))
+def test_decode_heightfield_converts_no_data_to_nan() -> None:
+    body = struct.pack("<5H", 100, NO_DATA_SENTINEL_U16, 300, 0, 500)
+    data = b"\x00" * 351 + body
+    out = decode_heightfield(data, 351, len(body))
     assert out[0] == 100
     assert np.isnan(out[1])
     assert out[2] == 300
-    assert out[3] == 400
+    assert np.isnan(out[3])
+    assert out[4] == 500
 
 
 @pytest.mark.skipif(not SAMPLE_FILE.exists(), reason="real sample fixture not present")
