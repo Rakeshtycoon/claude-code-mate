@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   downloadBackup,
   parseBackup,
@@ -6,22 +6,113 @@ import {
   summarize,
   collectData,
 } from '../lib/backup.js'
-import { formatDate } from '../lib/format.js'
+import {
+  getSnapshots,
+  addSnapshot,
+  deleteSnapshot,
+  snapshotAsBackup,
+  fileApiSupported,
+  fileBackupStatus,
+  setupFileBackup,
+  disableFileBackup,
+  backupToFileNow,
+} from '../lib/autobackup.js'
+
+function formatWhen(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 export default function Backup() {
   const fileRef = useRef(null)
   const [message, setMessage] = useState(null) // { type, text }
   const [pending, setPending] = useState(null) // parsed backup awaiting confirm
+  const [snapshots, setSnapshots] = useState(() => getSnapshots())
+  const [fileStatus, setFileStatus] = useState({ supported: false })
 
   const liveSummary = summarize(collectData())
 
+  function refreshSnapshots() {
+    setSnapshots(getSnapshots())
+  }
+
+  async function refreshFileStatus() {
+    setFileStatus(await fileBackupStatus())
+  }
+
+  useEffect(() => {
+    refreshFileStatus()
+  }, [])
+
+  /* ----- automatic: file ----- */
+  async function enableFileBackup() {
+    try {
+      await setupFileBackup()
+      await refreshFileStatus()
+      setMessage({
+        type: 'ok',
+        text: 'Auto-backup is on. This file will update automatically once a day, and whenever you tap "Back up now".',
+      })
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        setMessage({ type: 'err', text: 'Could not set up the backup file.' })
+      }
+    }
+  }
+
+  async function backupNow() {
+    try {
+      await backupToFileNow()
+      await refreshFileStatus()
+      setMessage({ type: 'ok', text: 'Backup file updated just now.' })
+    } catch (err) {
+      setMessage({ type: 'err', text: err.message })
+    }
+  }
+
+  async function turnOffFileBackup() {
+    await disableFileBackup()
+    await refreshFileStatus()
+    setMessage({ type: 'ok', text: 'Auto-backup to file turned off.' })
+  }
+
+  /* ----- snapshots ----- */
+  function snapshotNow() {
+    addSnapshot('manual')
+    refreshSnapshots()
+    setMessage({ type: 'ok', text: 'Restore point saved.' })
+  }
+
+  function restoreSnapshot(snap) {
+    if (
+      !window.confirm(
+        'Restore this point? It will replace the data currently on this device.'
+      )
+    )
+      return
+    restoreBackup(snapshotAsBackup(snap), { merge: false })
+    window.location.reload()
+  }
+
+  function removeSnapshot(id) {
+    deleteSnapshot(id)
+    refreshSnapshots()
+  }
+
+  /* ----- manual export / import ----- */
   function handleExport() {
     try {
       const backup = downloadBackup()
       const s = summarize(backup.data)
       setMessage({
         type: 'ok',
-        text: `Backup downloaded — ${s.days} day(s), ${s.goals} goal(s). Save this file to your phone or upload it to Google Drive.`,
+        text: `Backup downloaded — ${s.days} day(s), ${s.goals} goal(s).`,
       })
     } catch {
       setMessage({ type: 'err', text: 'Could not create the backup file.' })
@@ -34,25 +125,21 @@ export default function Backup() {
     const reader = new FileReader()
     reader.onload = () => {
       try {
-        const parsed = parseBackup(String(reader.result))
-        setPending(parsed)
+        setPending(parseBackup(String(reader.result)))
         setMessage(null)
       } catch (err) {
         setPending(null)
         setMessage({ type: 'err', text: err.message })
       }
     }
-    reader.onerror = () =>
-      setMessage({ type: 'err', text: 'Could not read that file.' })
+    reader.onerror = () => setMessage({ type: 'err', text: 'Could not read that file.' })
     reader.readAsText(file)
-    // Allow re-selecting the same file later.
     e.target.value = ''
   }
 
   function confirmRestore() {
     try {
       restoreBackup(pending, { merge: false })
-      // useLocalStorage reads on mount, so reload to show restored data.
       window.location.reload()
     } catch {
       setMessage({ type: 'err', text: 'Restore failed. Your data was not changed.' })
@@ -68,7 +155,7 @@ export default function Backup() {
         <div>
           <h1>Backup &amp; Restore</h1>
           <p className="muted">
-            Save your diary to a file, then load it on any phone or computer.
+            Your diary is backed up automatically — no download needed.
           </p>
         </div>
       </header>
@@ -79,29 +166,113 @@ export default function Backup() {
         </div>
       )}
 
+      {/* ---- Automatic daily backup (works everywhere) ---- */}
+      <section className="card">
+        <div className="section-bar">🔄 Automatic daily backup</div>
+        <p className="muted backup-desc">
+          Every day, the first time you open the app, it saves a restore point
+          automatically. You currently have <strong>{snapshots.length}</strong>{' '}
+          restore point(s). Newest is kept; up to 14 days are stored.
+        </p>
+        <div className="link-row" style={{ marginBottom: 12 }}>
+          <button className="btn" onClick={snapshotNow}>
+            Save a restore point now
+          </button>
+        </div>
+        {snapshots.length === 0 ? (
+          <p className="muted">No restore points yet — one will be made today.</p>
+        ) : (
+          <ul className="snapshot-list">
+            {snapshots.map((s) => {
+              const sum = summarize(s.data)
+              return (
+                <li key={s.id}>
+                  <span className="snap-when">{formatWhen(s.at)}</span>
+                  <span className="tag">{s.kind === 'manual' ? 'manual' : 'daily'}</span>
+                  <span className="snap-detail muted">
+                    {sum.days} day(s), {sum.goals} goal(s)
+                  </span>
+                  <span className="snap-actions">
+                    <button className="btn small" onClick={() => restoreSnapshot(s)}>
+                      Restore
+                    </button>
+                    <button className="icon-btn" title="Delete" onClick={() => removeSnapshot(s.id)}>
+                      ✕
+                    </button>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        <p className="muted small-note">
+          Restore points are stored inside this browser, so they protect against
+          mistakes — but to be safe if the phone is lost, also turn on the file
+          backup below or download a copy now and then.
+        </p>
+      </section>
+
+      {/* ---- Auto-save to a file (Chrome / Android / desktop) ---- */}
+      <section className="card">
+        <div className="section-bar">📁 Auto-save to a file</div>
+        {!fileStatus.supported ? (
+          <p className="muted backup-desc">
+            This browser can't auto-save to a file. On iPhone/Safari, use the
+            daily restore points above plus the manual backup below (save the
+            file to Google Drive). On Chrome or Android Chrome you get automatic
+            file saving here.
+          </p>
+        ) : !fileStatus.enabled ? (
+          <>
+            <p className="muted backup-desc">
+              Pick a backup file once — ideally inside a Google&nbsp;Drive folder
+              on your phone. After that it updates automatically once a day, with
+              no download and no prompts.
+            </p>
+            <button className="btn primary" onClick={enableFileBackup}>
+              Turn on auto-backup to a file
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="backup-desc">
+              Auto-backup is <strong>on</strong> → <code>{fileStatus.name}</code>
+              <br />
+              <span className="muted">
+                Last saved: {fileStatus.lastBackup || 'today'}
+                {!fileStatus.granted && ' (tap "Back up now" to re-allow access)'}
+              </span>
+            </p>
+            <div className="link-row">
+              <button className="btn primary" onClick={backupNow}>
+                Back up now
+              </button>
+              <button className="btn" onClick={turnOffFileBackup}>
+                Turn off
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* ---- Manual export / import ---- */}
       <div className="grid-2">
         <section className="card backup-card">
-          <h3 className="list-title">⬇️ Backup (save)</h3>
-          <p className="muted backup-desc">
-            Downloads one <code>.json</code> file with everything in your diary.
-            Keep it in your phone storage or upload it to Google&nbsp;Drive.
-          </p>
+          <h3 className="list-title">⬇️ Download a copy</h3>
           <ul className="backup-stats">
             <li><strong>{liveSummary.days}</strong> daily page(s)</li>
             <li><strong>{liveSummary.goals}</strong> goal(s)</li>
             <li><strong>{liveSummary.monthlyPlans}</strong> monthly plan(s)</li>
-            <li><strong>{liveSummary.rituals + liveSummary.quotes + liveSummary.bucket}</strong> list item(s)</li>
           </ul>
-          <button className="btn primary" onClick={handleExport}>
+          <button className="btn" onClick={handleExport}>
             Download backup file
           </button>
         </section>
 
         <section className="card backup-card">
-          <h3 className="list-title">⬆️ Restore (load)</h3>
+          <h3 className="list-title">⬆️ Restore from a file</h3>
           <p className="muted backup-desc">
-            Pick a backup file from this device — including one you downloaded
-            from Google&nbsp;Drive. Your old diary will come back.
+            Load a backup file from this device or Google&nbsp;Drive.
           </p>
           <input
             ref={fileRef}
@@ -113,18 +284,14 @@ export default function Backup() {
           <button className="btn" onClick={() => fileRef.current?.click()}>
             Choose backup file…
           </button>
-
           {pending && pendingSummary && (
             <div className="restore-confirm">
               <p>
-                This backup is from{' '}
-                <strong>{formatDate(pending.exportedAt?.slice(0, 10))}</strong> and
-                contains <strong>{pendingSummary.days}</strong> day(s),{' '}
+                This backup has <strong>{pendingSummary.days}</strong> day(s),{' '}
                 <strong>{pendingSummary.goals}</strong> goal(s).
               </p>
               <p className="warn">
-                ⚠️ Restoring will <strong>replace</strong> the data currently on
-                this device. This cannot be undone — back up first if unsure.
+                ⚠️ This replaces the data on this device and can't be undone.
               </p>
               <div className="link-row">
                 <button className="btn primary" onClick={confirmRestore}>
@@ -138,19 +305,6 @@ export default function Backup() {
           )}
         </section>
       </div>
-
-      <section className="card">
-        <h3 className="list-title">📂 Using Google Drive</h3>
-        <ol className="how-to">
-          <li>Tap <strong>Download backup file</strong> above.</li>
-          <li>Open the Google&nbsp;Drive app and upload that file (or save it there).</li>
-          <li>On your new phone, open Drive and download the file.</li>
-          <li>Come here, tap <strong>Choose backup file…</strong>, pick it, and confirm.</li>
-        </ol>
-        <p className="muted">
-          Tip: take a fresh backup now and then so your latest work is always safe.
-        </p>
-      </section>
     </div>
   )
 }

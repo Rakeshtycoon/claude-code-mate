@@ -23,17 +23,32 @@ Each section mirrors a part of the physical diary:
 | **Profile** | Company & personal details, plus Vision, Mission and Core Values. |
 | **Backup** | Download your whole diary as one `.json` file, and restore it on any device — including via Google Drive. |
 
-## Backup & moving to a new phone
+## Backup
 
-Because the app has no server, use the **Backup** section to move your data:
+The **Backup** section keeps your diary safe with three layers. Since the app
+runs only in the browser, it can't wake up on its own while closed — so the
+automatic backup runs **the first time you open the app each day** (which, for
+a morning routine, means roughly once every morning).
 
-1. Tap **Download backup file** — you get a `business-diary-backup-YYYY-MM-DD.json`.
-2. Save it to your phone, or upload it to **Google Drive**.
-3. On the new phone, download the file from Drive.
-4. Open **Backup → Choose backup file…**, pick it, and confirm. Your old diary
-   is restored (this replaces the data currently on that device).
+1. **Automatic daily restore points** — every day on first open, a snapshot is
+   saved silently inside the browser (up to 14 kept). Restore any of them with
+   one tap. No download needed. Great for undoing mistakes.
+2. **Auto-save to a file** *(Chrome / Edge / Android Chrome)* — pick a backup
+   file once (ideally in a Google Drive folder); it then updates automatically
+   once a day and whenever you tap **Back up now**, with no prompts. This is the
+   layer that protects you if the phone is lost.
+3. **Manual download / restore** — download a `.json` copy anytime, or restore
+   one from this device or Google Drive. Works in every browser, including
+   iPhone/Safari.
 
-Take a fresh backup now and then so your latest work is always safe.
+### Moving to a new phone
+Save (or auto-save) the backup file to **Google Drive**, download it on the new
+phone, then open **Backup → Choose backup file…** and confirm. Your old diary
+comes back (this replaces the data on that device).
+
+> Note: true background backup at a fixed time while the app is closed would
+> require installing it as a PWA (Chrome's Periodic Background Sync) or a small
+> server. The current approach is server-free and private.
 
 ## Tech stack
 

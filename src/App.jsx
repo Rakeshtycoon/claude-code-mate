@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Dashboard from './components/Dashboard.jsx'
 import Profile from './components/Profile.jsx'
 import Goals from './components/Goals.jsx'
@@ -7,6 +7,7 @@ import Monthly from './components/Monthly.jsx'
 import Planner from './components/Planner.jsx'
 import Lists from './components/Lists.jsx'
 import Backup from './components/Backup.jsx'
+import { runDailyAutoBackup } from './lib/autobackup.js'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -33,6 +34,11 @@ const VIEWS = {
 export default function App() {
   const [view, setView] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Once per day, the first time the app opens, take an automatic backup.
+  useEffect(() => {
+    runDailyAutoBackup()
+  }, [])
 
   function go(id) {
     setView(id)
