@@ -1,7 +1,49 @@
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { todayISO } from '../lib/format.js'
-import { useState } from 'react'
+import { todayISO, formatDate, uid } from '../lib/format.js'
+import { useMemo, useState } from 'react'
 import EditableList from './EditableList.jsx'
+
+// Every list on the daily page is a task list whose unfinished items can be
+// carried forward to the next day.
+const TASK_KEYS = [
+  'todo',
+  'yearlyGoal',
+  'visits',
+  'followups',
+  'quotations',
+  'operations',
+  'business',
+  'teamFollow',
+  'otherFollow',
+  'familyOther',
+]
+
+/** Collect not-done items from a day, grouped by list, with a total count. */
+function pendingOf(day) {
+  const lists = {}
+  let count = 0
+  for (const key of TASK_KEYS) {
+    const items = (day?.lists?.[key] || []).filter((it) => !it.done)
+    if (items.length) {
+      lists[key] = items
+      count += items.length
+    }
+  }
+  return { lists, count }
+}
+
+/** Find the most recent earlier day that still has pending tasks. */
+function findCarrySource(days, date) {
+  const earlier = Object.keys(days)
+    .filter((d) => d < date)
+    .sort()
+    .reverse()
+  for (const d of earlier) {
+    const { lists, count } = pendingOf(days[d])
+    if (count > 0) return { date: d, lists, count }
+  }
+  return null
+}
 
 const MANTRAS = [
   'Prayer / Gratitude',
@@ -115,6 +157,28 @@ export default function Daily() {
     updateDay({ ...day, lists: { ...day.lists, [key]: items } })
   }
 
+  // Pending tasks from an earlier day, offered for carry-forward. Only on the
+  // day being viewed, only when viewing today, and only until answered once.
+  const carrySource = useMemo(() => {
+    if (date !== todayISO()) return null
+    if (days[date]?.carryAsked) return null
+    return findCarrySource(days, date)
+  }, [days, date])
+
+  function carryForward() {
+    if (!carrySource) return
+    const nextLists = { ...day.lists }
+    for (const [key, items] of Object.entries(carrySource.lists)) {
+      const copies = items.map((it) => ({ id: uid(), text: it.text, done: false }))
+      nextLists[key] = [...(nextLists[key] || []), ...copies]
+    }
+    updateDay({ ...day, lists: nextLists, carryAsked: true })
+  }
+
+  function dismissCarry() {
+    updateDay({ ...day, carryAsked: true })
+  }
+
   const weekday = new Date(date).toLocaleDateString(undefined, { weekday: 'long' })
   const dateLabel = new Date(date).toLocaleDateString(undefined, {
     month: 'long',
@@ -142,6 +206,24 @@ export default function Daily() {
           </button>
         </div>
       </header>
+
+      {carrySource && (
+        <div className="carry-banner">
+          <div className="carry-text">
+            <strong>{carrySource.count}</strong> કામ {formatDate(carrySource.date)} ના
+            બાકી છે. આજે carry forward કરવા?
+            <span className="muted"> ({carrySource.count} pending task(s))</span>
+          </div>
+          <div className="carry-actions">
+            <button className="btn primary" onClick={carryForward}>
+              હા, આજે લાવો
+            </button>
+            <button className="btn" onClick={dismissCarry}>
+              ના
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="todo-feature">
         <EditableList
