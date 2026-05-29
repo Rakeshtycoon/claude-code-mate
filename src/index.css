@@ -22,10 +22,16 @@ body,
   margin: 0;
 }
 
+html,
+body {
+  /* Universal guard against sideways scrolling (works in every browser/
+     webview, unlike overflow:clip). Keeps vertical scrolling smooth. */
+  overflow-x: hidden;
+}
+
 body {
   min-height: 100dvh;
-  /* Stop the browser's pull-to-refresh / overscroll from hijacking an
-     upward swipe, which made scrolling up feel stuck. */
+  /* Stop pull-to-refresh / overscroll from hijacking an upward swipe. */
   overscroll-behavior-y: contain;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
@@ -38,10 +44,6 @@ body {
   display: flex;
   min-height: 100dvh;
   width: 100%;
-  /* Contain any sideways overflow here (not on html/body) so the page's
-     normal vertical scrolling is never affected. `clip` doesn't create a
-     scroll container. */
-  overflow-x: clip;
 }
 
 .sidebar {
@@ -696,8 +698,10 @@ li.done .checklist-text {
 /* ---------- Calendar ---------- */
 .calendar {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  /* minmax(0, 1fr) lets the 7 columns shrink to fit narrow phones;
+     plain 1fr keeps a content-based min width and overflows sideways. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
 }
 
 .cal-weekday {
