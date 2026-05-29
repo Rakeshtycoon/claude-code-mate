@@ -22,16 +22,11 @@ body,
   margin: 0;
 }
 
-html,
-body {
-  /* Prevent sideways scrolling only; vertical scroll stays on the page.
-     `clip` (not `hidden`) avoids turning body into a scroll container. */
-  overflow-x: clip;
-  max-width: 100%;
-}
-
 body {
   min-height: 100dvh;
+  /* Stop the browser's pull-to-refresh / overscroll from hijacking an
+     upward swipe, which made scrolling up feel stuck. */
+  overscroll-behavior-y: contain;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -43,6 +38,10 @@ body {
   display: flex;
   min-height: 100dvh;
   width: 100%;
+  /* Contain any sideways overflow here (not on html/body) so the page's
+     normal vertical scrolling is never affected. `clip` doesn't create a
+     scroll container. */
+  overflow-x: clip;
 }
 
 .sidebar {
