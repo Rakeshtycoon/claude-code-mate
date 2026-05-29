@@ -22,17 +22,8 @@ body,
   margin: 0;
 }
 
-html,
-body {
-  /* Universal guard against sideways scrolling (works in every browser/
-     webview, unlike overflow:clip). Keeps vertical scrolling smooth. */
-  overflow-x: hidden;
-}
-
 body {
   min-height: 100dvh;
-  /* Stop pull-to-refresh / overscroll from hijacking an upward swipe. */
-  overscroll-behavior-y: contain;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
