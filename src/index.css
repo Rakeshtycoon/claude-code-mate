@@ -577,6 +577,22 @@ li.done .checklist-text {
   padding: 7px 9px;
 }
 
+/* ---------- Today's To-Do (featured) ---------- */
+.todo-feature .list-card {
+  border: 2px solid var(--pa-orange);
+  border-top: 6px solid var(--pa-orange);
+  background: #fffdfa;
+}
+
+.todo-feature .list-title {
+  color: var(--pa-orange);
+  font-size: 16px;
+}
+
+.todo-feature .checklist li {
+  font-size: 15px;
+}
+
 /* ---------- Tables ---------- */
 .table {
   width: 100%;

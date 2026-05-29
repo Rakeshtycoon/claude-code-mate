@@ -143,6 +143,15 @@ export default function Daily() {
         </div>
       </header>
 
+      <div className="todo-feature">
+        <EditableList
+          title="📝 આજના કામ / To-Do"
+          items={day.lists.todo || []}
+          onChange={(items) => setList('todo', items)}
+          placeholder="આજે શું કરવાનું છે? લખો…"
+        />
+      </div>
+
       <section className="card">
         <div className="section-bar">
           Morning Mantras{' '}
