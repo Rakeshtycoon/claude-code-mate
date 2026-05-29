@@ -6,6 +6,7 @@ import Daily from './components/Daily.jsx'
 import Monthly from './components/Monthly.jsx'
 import Planner from './components/Planner.jsx'
 import Lists from './components/Lists.jsx'
+import Backup from './components/Backup.jsx'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -15,6 +16,7 @@ const NAV = [
   { id: 'planner', label: 'Planner', icon: '🗓️' },
   { id: 'lists', label: 'Lists', icon: '📝' },
   { id: 'profile', label: 'Profile', icon: '🧑‍💼' },
+  { id: 'backup', label: 'Backup', icon: '💾' },
 ]
 
 const VIEWS = {
@@ -25,6 +27,7 @@ const VIEWS = {
   planner: () => <Planner />,
   lists: () => <Lists />,
   profile: () => <Profile />,
+  backup: () => <Backup />,
 }
 
 export default function App() {

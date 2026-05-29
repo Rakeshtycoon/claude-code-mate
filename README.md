@@ -21,6 +21,19 @@ Each section mirrors a part of the physical diary:
 | **Planner** | A monthly calendar with a note per day, plus "My Planning for Next Month". |
 | **Lists** | Daily Rituals, Empowering Lines & Quotes, and "20 Things Before I Die". |
 | **Profile** | Company & personal details, plus Vision, Mission and Core Values. |
+| **Backup** | Download your whole diary as one `.json` file, and restore it on any device — including via Google Drive. |
+
+## Backup & moving to a new phone
+
+Because the app has no server, use the **Backup** section to move your data:
+
+1. Tap **Download backup file** — you get a `business-diary-backup-YYYY-MM-DD.json`.
+2. Save it to your phone, or upload it to **Google Drive**.
+3. On the new phone, download the file from Drive.
+4. Open **Backup → Choose backup file…**, pick it, and confirm. Your old diary
+   is restored (this replaces the data currently on that device).
+
+Take a fresh backup now and then so your latest work is always safe.
 
 ## Tech stack
 
