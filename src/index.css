@@ -23,6 +23,15 @@ body,
   margin: 0;
 }
 
+html,
+body {
+  /* Never allow sideways scrolling; keeps vertical scroll smooth on phones.
+     `clip` (not `hidden`) avoids turning body into a scroll container, so
+     sticky positioning keeps working. */
+  overflow-x: clip;
+  max-width: 100%;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
@@ -34,6 +43,8 @@ body {
 .app {
   display: flex;
   min-height: 100%;
+  width: 100%;
+  overflow-x: clip;
 }
 
 .sidebar {
@@ -194,7 +205,7 @@ h2 {
 
 .grid-2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 18px;
 }
 
@@ -471,7 +482,7 @@ li.done .checklist-text {
 /* ---------- Stats ---------- */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -526,7 +537,7 @@ li.done .checklist-text {
 
 .mantras {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: 8px;
 }
 
@@ -560,6 +571,7 @@ li.done .checklist-text {
 .target-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .target-table th {
@@ -700,6 +712,7 @@ li.done .checklist-text {
   border: 1px solid var(--border);
   border-radius: 8px;
   min-height: 84px;
+  min-width: 0;
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -723,6 +736,8 @@ li.done .checklist-text {
 
 .cal-note {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   border: none;
   padding: 2px 0 0;
   font-size: 12px;
