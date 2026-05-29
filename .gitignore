@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Generated single-file test build (run `npm run build:single`)
+business-diary-test.html
