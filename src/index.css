@@ -19,20 +19,19 @@
 html,
 body,
 #root {
-  height: 100%;
   margin: 0;
 }
 
 html,
 body {
-  /* Never allow sideways scrolling; keeps vertical scroll smooth on phones.
-     `clip` (not `hidden`) avoids turning body into a scroll container, so
-     sticky positioning keeps working. */
+  /* Prevent sideways scrolling only; vertical scroll stays on the page.
+     `clip` (not `hidden`) avoids turning body into a scroll container. */
   overflow-x: clip;
   max-width: 100%;
 }
 
 body {
+  min-height: 100dvh;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
@@ -42,9 +41,8 @@ body {
 /* ---------- Layout ---------- */
 .app {
   display: flex;
-  min-height: 100%;
+  min-height: 100dvh;
   width: 100%;
-  overflow-x: clip;
 }
 
 .sidebar {
@@ -163,6 +161,9 @@ nav {
 
 .content {
   padding: 28px;
+  /* Extra room at the bottom so the last items clear the phone's
+     gesture/navigation bar and stay scrollable into view. */
+  padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
   max-width: 1080px;
   margin: 0 auto;
 }
@@ -1067,5 +1068,6 @@ li.done .checklist-text {
   }
   .content {
     padding: 18px;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 }
