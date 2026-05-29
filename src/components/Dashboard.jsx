@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { todayISO, formatMoney } from '../lib/format.js'
+import { QuoteRotator, Slideshow } from './Inspiration.jsx'
 
 const GOAL_CATS = ['business', 'finance', 'family', 'health', 'pa', 'crazy']
 
 export default function Dashboard({ onNavigate }) {
+  const [slideshow, setSlideshow] = useState(false)
   const [profile] = useLocalStorage('bd.profile', {})
   const [goals] = useLocalStorage('bd.goals', {})
   const [days] = useLocalStorage('bd.days', {})
@@ -68,6 +71,9 @@ export default function Dashboard({ onNavigate }) {
           <p>{profile.vision}</p>
         </div>
       )}
+
+      <QuoteRotator onOpen={() => setSlideshow(true)} />
+      {slideshow && <Slideshow onClose={() => setSlideshow(false)} />}
 
       <div className="stat-grid">
         <button className="card stat clickable" onClick={() => onNavigate('daily')}>

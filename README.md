@@ -20,6 +20,7 @@ Each section mirrors a part of the physical diary:
 | **Monthly** | *Monthly Plan* (last year vs this year for Sales/Profit/Purchase/Expense/Other, Comparison, Target, Achieved, % achieved, missed actions) and *Sales Data Analysis* (month-by-month Apr→Mar table with auto-calculated %). |
 | **Planner** | A monthly calendar with a note per day, plus "My Planning for Next Month". |
 | **Lists** | Daily Rituals, Empowering Lines & Quotes, and "20 Things Before I Die". |
+| **Inspiration** | The empowering lines and bucket-list wishes rotate one-by-one on the Dashboard, and in a tappable full-screen slideshow (auto-advance, prev/next, play/pause). |
 | **Profile** | Company & personal details, plus Vision, Mission and Core Values. |
 | **Backup** | Download your whole diary as one `.json` file, and restore it on any device — including via Google Drive. |
 
