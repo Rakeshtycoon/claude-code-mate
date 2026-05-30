@@ -791,6 +791,32 @@ li.done .checklist-text {
   cursor: pointer;
 }
 
+/* ---------- This month's action plan box ---------- */
+.month-plan {
+  border: 2px solid var(--pa-orange);
+  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
+}
+
+.month-plan-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  color: var(--pa-blue);
+  margin-bottom: 8px;
+}
+
+.month-plan-head .muted {
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.month-plan-empty {
+  margin: 0;
+  font-size: 13px;
+}
+
 /* ---------- Calendar ---------- */
 .calendar {
   display: grid;

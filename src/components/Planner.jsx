@@ -65,6 +65,15 @@ export default function Planner() {
     setNotes({ ...notes, [month]: { ...dayNotes, [day]: text } })
   }
 
+  // Actions planned for this month (added last month) — let them be ticked off.
+  function toggleMonthPlan(id) {
+    const list = nextPlans[month] || []
+    setNextPlans({
+      ...nextPlans,
+      [month]: list.map((it) => (it.id === id ? { ...it, done: !it.done } : it)),
+    })
+  }
+
   function styleFor(day) {
     return monthStyles[day] || DEFAULT_STYLE
   }
@@ -157,6 +166,34 @@ export default function Planner() {
         )}
       </div>
 
+      {/* This month's action plan — what you wrote last month under
+          "My Planning for Next Month". Shown like a marked calendar square. */}
+      <div className="card month-plan">
+        <div className="month-plan-head">
+          <span>📌 Action Plan — {monthLabel(month).split(' ')[0]}</span>
+          <span className="muted">planned last month</span>
+        </div>
+        {(nextPlans[month] || []).length === 0 ? (
+          <p className="muted month-plan-empty">
+            Nothing planned for {monthLabel(month).split(' ')[0]} yet — open last month
+            and add actions under “My Planning for Next Month”.
+          </p>
+        ) : (
+          <ul className="checklist">
+            {(nextPlans[month] || []).map((it) => (
+              <li key={it.id} className={it.done ? 'done' : ''}>
+                <input
+                  type="checkbox"
+                  checked={!!it.done}
+                  onChange={() => toggleMonthPlan(it.id)}
+                />
+                <span className="checklist-text">{it.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="card">
         <div className="calendar">
           {WEEKDAYS.map((w) => (
@@ -191,14 +228,6 @@ export default function Planner() {
           ))}
         </div>
       </div>
-
-      {/* What was planned last month for the month now in view. */}
-      <EditableList
-        title={`Action Plan for ${monthLabel(month).split(' ')[0]} (planned earlier)`}
-        items={nextPlans[month] || []}
-        onChange={(items) => setNextPlans({ ...nextPlans, [month]: items })}
-        placeholder={`Add an action for ${monthLabel(month).split(' ')[0]}…`}
-      />
 
       {/* Stored under next month's key so it appears when you open that month. */}
       <EditableList
