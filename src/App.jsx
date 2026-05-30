@@ -6,6 +6,7 @@ import Daily from './components/Daily.jsx'
 import Monthly from './components/Monthly.jsx'
 import Planner from './components/Planner.jsx'
 import Lists from './components/Lists.jsx'
+import Graphs from './components/Graphs.jsx'
 import Backup from './components/Backup.jsx'
 import { runDailyAutoBackup } from './lib/autobackup.js'
 
@@ -16,6 +17,7 @@ const NAV = [
   { id: 'monthly', label: 'Monthly', icon: '📈' },
   { id: 'planner', label: 'Planner', icon: '🗓️' },
   { id: 'lists', label: 'Lists', icon: '📝' },
+  { id: 'graphs', label: 'Graphs', icon: '📉' },
   { id: 'profile', label: 'Profile', icon: '🧑‍💼' },
   { id: 'backup', label: 'Backup', icon: '💾' },
 ]
@@ -27,6 +29,7 @@ const VIEWS = {
   monthly: () => <Monthly />,
   planner: () => <Planner />,
   lists: () => <Lists />,
+  graphs: (nav) => <Graphs onNavigate={nav} />,
   profile: () => <Profile />,
   backup: () => <Backup />,
 }
