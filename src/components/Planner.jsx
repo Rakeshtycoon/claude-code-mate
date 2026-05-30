@@ -19,7 +19,6 @@ function buildGrid(ym) {
   const [y, m] = ym.split('-').map(Number)
   const first = new Date(y, m - 1, 1)
   const daysInMonth = new Date(y, m, 0).getDate()
-  // JS: 0=Sun … 6=Sat. Convert to Mon=0 … Sun=6.
   const lead = (first.getDay() + 6) % 7
   const cells = []
   for (let i = 0; i < lead; i++) cells.push(null)
@@ -39,28 +38,55 @@ const SIZES = [
 
 const COLORS = ['#0f172a', '#2563eb', '#16a34a', '#dc2626', '#ea580c', '#7c3aed']
 
+// New notes start black + small. Each note can override this on its own.
+const DEFAULT_STYLE = { fontSize: 11, color: '#0f172a' }
+
 export default function Planner() {
   const [month, setMonth] = useState(currentMonth())
   const [notes, setNotes] = useLocalStorage('bd.plannerNotes', {})
   const [nextPlans, setNextPlans] = useLocalStorage('bd.nextMonthPlans', {})
-  const [noteStyle, setNoteStyle] = useLocalStorage('bd.plannerStyle', {
-    fontSize: 12,
-    color: '#0f172a',
-  })
-
-  const cellNoteStyle = { fontSize: `${noteStyle.fontSize}px`, color: noteStyle.color }
+  // Per-day note styles: { [month]: { [day]: { fontSize, color } } }
+  const [styles, setStyles] = useLocalStorage('bd.plannerNoteStyles', {})
+  const [selectedDay, setSelectedDay] = useState(null)
 
   const grid = buildGrid(month)
   const dayNotes = notes[month] || {}
+  const monthStyles = styles[month] || {}
 
   function setDayNote(day, text) {
-    const next = { ...dayNotes, [day]: text }
-    setNotes({ ...notes, [month]: next })
+    setNotes({ ...notes, [month]: { ...dayNotes, [day]: text } })
+  }
+
+  function styleFor(day) {
+    return monthStyles[day] || DEFAULT_STYLE
+  }
+
+  // Update only the selected day's style; other notes are untouched.
+  function patchSelectedStyle(patch) {
+    if (!selectedDay) return
+    const current = monthStyles[selectedDay] || DEFAULT_STYLE
+    setStyles({
+      ...styles,
+      [month]: { ...monthStyles, [selectedDay]: { ...current, ...patch } },
+    })
+  }
+
+  function resetSelectedStyle() {
+    if (!selectedDay) return
+    const next = { ...monthStyles }
+    delete next[selectedDay]
+    setStyles({ ...styles, [month]: next })
+  }
+
+  function changeMonth(value) {
+    setMonth(value)
+    setSelectedDay(null)
   }
 
   const today = new Date()
   const todayKey = today.toISOString().slice(0, 7)
   const todayDate = today.getDate()
+  const sel = selectedDay ? styleFor(selectedDay) : null
 
   return (
     <div>
@@ -69,44 +95,58 @@ export default function Planner() {
           <h1>Monthly Planner</h1>
           <p className="muted">A bird's-eye view of {monthLabel(month)}.</p>
         </div>
-        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        <input type="month" value={month} onChange={(e) => changeMonth(e.target.value)} />
       </header>
 
       <div className="card planner-toolbar">
-        <span className="muted">Note style:</span>
-        <label className="toolbar-field">
-          <span>Size</span>
-          <select
-            value={noteStyle.fontSize}
-            onChange={(e) => setNoteStyle({ ...noteStyle, fontSize: Number(e.target.value) })}
-          >
-            {SIZES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="toolbar-field-label">Color</span>
-        <div className="swatches">
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`swatch ${noteStyle.color === c ? 'active' : ''}`}
-              style={{ background: c }}
-              title={c}
-              onClick={() => setNoteStyle({ ...noteStyle, color: c })}
-            />
-          ))}
-          <input
-            type="color"
-            className="swatch-picker"
-            value={noteStyle.color}
-            title="Custom colour"
-            onChange={(e) => setNoteStyle({ ...noteStyle, color: e.target.value })}
-          />
-        </div>
+        {!selectedDay ? (
+          <span className="muted">
+            Tap a date’s note below, then change its size or colour here — only that note
+            changes.
+          </span>
+        ) : (
+          <>
+            <span className="muted">
+              Styling note for <strong>{monthLabel(month).split(' ')[0]} {selectedDay}</strong>:
+            </span>
+            <label className="toolbar-field">
+              <span>Size</span>
+              <select
+                value={sel.fontSize}
+                onChange={(e) => patchSelectedStyle({ fontSize: Number(e.target.value) })}
+              >
+                {SIZES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="toolbar-field-label">Color</span>
+            <div className="swatches">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`swatch ${sel.color === c ? 'active' : ''}`}
+                  style={{ background: c }}
+                  title={c}
+                  onClick={() => patchSelectedStyle({ color: c })}
+                />
+              ))}
+              <input
+                type="color"
+                className="swatch-picker"
+                value={sel.color}
+                title="Custom colour"
+                onChange={(e) => patchSelectedStyle({ color: e.target.value })}
+              />
+            </div>
+            <button className="btn small" type="button" onClick={resetSelectedStyle}>
+              Reset
+            </button>
+          </>
+        )}
       </div>
 
       <div className="card">
@@ -121,16 +161,20 @@ export default function Planner() {
               key={i}
               className={`cal-cell ${day ? '' : 'empty'} ${
                 month === todayKey && day === todayDate ? 'today' : ''
-              }`}
+              } ${day && day === selectedDay ? 'selected' : ''}`}
             >
               {day && (
                 <>
                   <span className="cal-date">{day}</span>
                   <textarea
                     className="cal-note"
-                    style={cellNoteStyle}
+                    style={{
+                      fontSize: `${styleFor(day).fontSize}px`,
+                      color: styleFor(day).color,
+                    }}
                     value={dayNotes[day] || ''}
                     placeholder="…"
+                    onFocus={() => setSelectedDay(day)}
                     onChange={(e) => setDayNote(day, e.target.value)}
                   />
                 </>

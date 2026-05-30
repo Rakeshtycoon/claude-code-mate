@@ -828,6 +828,11 @@ li.done .checklist-text {
   box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.2);
 }
 
+.cal-cell.selected {
+  border-color: var(--pa-blue);
+  box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.25);
+}
+
 .cal-date {
   font-size: 12px;
   font-weight: 700;
