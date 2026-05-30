@@ -14,6 +14,13 @@ function monthLabel(ym) {
   })
 }
 
+// Shift a YYYY-MM string by a number of months (e.g. +1 = next month).
+function addMonths(ym, delta) {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 // Build a Mon→Sun calendar grid for the given YYYY-MM.
 function buildGrid(ym) {
   const [y, m] = ym.split('-').map(Number)
@@ -50,6 +57,7 @@ export default function Planner() {
   const [selectedDay, setSelectedDay] = useState(null)
 
   const grid = buildGrid(month)
+  const nextMonth = addMonths(month, 1)
   const dayNotes = notes[month] || {}
   const monthStyles = styles[month] || {}
 
@@ -184,11 +192,20 @@ export default function Planner() {
         </div>
       </div>
 
+      {/* What was planned last month for the month now in view. */}
       <EditableList
-        title={`My Planning for Next Month`}
+        title={`Action Plan for ${monthLabel(month).split(' ')[0]} (planned earlier)`}
         items={nextPlans[month] || []}
         onChange={(items) => setNextPlans({ ...nextPlans, [month]: items })}
-        placeholder="What will you do next month?"
+        placeholder={`Add an action for ${monthLabel(month).split(' ')[0]}…`}
+      />
+
+      {/* Stored under next month's key so it appears when you open that month. */}
+      <EditableList
+        title={`My Planning for ${monthLabel(nextMonth).split(' ')[0]} (Next Month)`}
+        items={nextPlans[nextMonth] || []}
+        onChange={(items) => setNextPlans({ ...nextPlans, [nextMonth]: items })}
+        placeholder={`What action should you take in ${monthLabel(nextMonth).split(' ')[0]}?`}
       />
     </div>
   )
