@@ -9,6 +9,7 @@ import Lists from './components/Lists.jsx'
 import Graphs from './components/Graphs.jsx'
 import Backup from './components/Backup.jsx'
 import { runDailyAutoBackup } from './lib/autobackup.js'
+import { useReminders } from './hooks/useReminders.js'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -37,6 +38,9 @@ const VIEWS = {
 export default function App() {
   const [view, setView] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Schedule reminders for timed To-Do tasks (while the app is open).
+  useReminders()
 
   // Once per day, the first time the app opens, take an automatic backup.
   useEffect(() => {

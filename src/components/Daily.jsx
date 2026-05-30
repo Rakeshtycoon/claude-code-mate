@@ -2,6 +2,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { todayISO, formatDate, uid } from '../lib/format.js'
 import { useMemo, useState } from 'react'
 import EditableList from './EditableList.jsx'
+import TodoList from './TodoList.jsx'
 
 // Every list on the daily page is a task list whose unfinished items can be
 // carried forward to the next day.
@@ -142,6 +143,15 @@ function TargetTable({ label, data, onChange }) {
 export default function Daily() {
   const [days, setDays] = useLocalStorage('bd.days', {})
   const [date, setDate] = useState(todayISO())
+  const [notifyState, setNotifyState] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  )
+
+  function enableNotify() {
+    if (typeof Notification !== 'undefined') {
+      Notification.requestPermission().then((p) => setNotifyState(p))
+    }
+  }
 
   const day = days[date] || emptyDay()
 
@@ -226,11 +236,11 @@ export default function Daily() {
       )}
 
       <div className="todo-feature">
-        <EditableList
-          title="📝 આજના કામ / To-Do"
+        <TodoList
           items={day.lists.todo || []}
           onChange={(items) => setList('todo', items)}
-          placeholder="આજે શું કરવાનું છે? લખો…"
+          notifyState={notifyState}
+          onEnableNotify={enableNotify}
         />
       </div>
 

@@ -612,6 +612,29 @@ li.done .checklist-text {
   gap: 8px;
 }
 
+/* ---------- To-Do with optional time ---------- */
+.list-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.list-head-row .list-title {
+  margin: 0;
+}
+
+.todo-time {
+  width: 116px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+}
+
+.inline-add .todo-text {
+  flex: 1;
+}
+
 /* ---------- Today's To-Do (featured) ---------- */
 .todo-feature .list-card {
   border: 2px solid var(--pa-orange);
