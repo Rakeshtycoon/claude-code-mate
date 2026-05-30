@@ -30,10 +30,25 @@ function buildGrid(ym) {
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+const SIZES = [
+  { label: 'Small', value: 11 },
+  { label: 'Medium', value: 13 },
+  { label: 'Large', value: 16 },
+  { label: 'X-Large', value: 20 },
+]
+
+const COLORS = ['#0f172a', '#2563eb', '#16a34a', '#dc2626', '#ea580c', '#7c3aed']
+
 export default function Planner() {
   const [month, setMonth] = useState(currentMonth())
   const [notes, setNotes] = useLocalStorage('bd.plannerNotes', {})
   const [nextPlans, setNextPlans] = useLocalStorage('bd.nextMonthPlans', {})
+  const [noteStyle, setNoteStyle] = useLocalStorage('bd.plannerStyle', {
+    fontSize: 12,
+    color: '#0f172a',
+  })
+
+  const cellNoteStyle = { fontSize: `${noteStyle.fontSize}px`, color: noteStyle.color }
 
   const grid = buildGrid(month)
   const dayNotes = notes[month] || {}
@@ -57,6 +72,43 @@ export default function Planner() {
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
       </header>
 
+      <div className="card planner-toolbar">
+        <span className="muted">Note style:</span>
+        <label className="toolbar-field">
+          <span>Size</span>
+          <select
+            value={noteStyle.fontSize}
+            onChange={(e) => setNoteStyle({ ...noteStyle, fontSize: Number(e.target.value) })}
+          >
+            {SIZES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="toolbar-field-label">Color</span>
+        <div className="swatches">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`swatch ${noteStyle.color === c ? 'active' : ''}`}
+              style={{ background: c }}
+              title={c}
+              onClick={() => setNoteStyle({ ...noteStyle, color: c })}
+            />
+          ))}
+          <input
+            type="color"
+            className="swatch-picker"
+            value={noteStyle.color}
+            title="Custom colour"
+            onChange={(e) => setNoteStyle({ ...noteStyle, color: e.target.value })}
+          />
+        </div>
+      </div>
+
       <div className="card">
         <div className="calendar">
           {WEEKDAYS.map((w) => (
@@ -76,6 +128,7 @@ export default function Planner() {
                   <span className="cal-date">{day}</span>
                   <textarea
                     className="cal-note"
+                    style={cellNoteStyle}
                     value={dayNotes[day] || ''}
                     placeholder="…"
                     onChange={(e) => setDayNote(day, e.target.value)}
