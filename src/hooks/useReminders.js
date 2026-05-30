@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocalStorage } from './useLocalStorage.js'
-import { todayISO } from '../lib/format.js'
+import { todayISO, formatTime12 } from '../lib/format.js'
 
 /**
  * Fire a browser notification at the time set on today's To-Do tasks.
@@ -38,7 +38,7 @@ export function useReminders() {
           if (Notification.permission === 'granted') {
             try {
               new Notification('Business Diary — આજનું કામ', {
-                body: `🕐 ${t.time}  —  ${t.text}`,
+                body: `🕐 ${formatTime12(t.time)}  —  ${t.text}`,
               })
             } catch {
               // Some browsers require notifications via a service worker; ignore.

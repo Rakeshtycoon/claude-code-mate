@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { uid } from '../lib/format.js'
+import TimeInput from './TimeInput.jsx'
 
 /**
  * Today's To-Do list with an optional time per task. Setting a time schedules
@@ -54,13 +55,7 @@ export default function TodoList({ items = [], onChange, notifyState, onEnableNo
           <li key={it.id} className={it.done ? 'done' : ''}>
             <input type="checkbox" checked={!!it.done} onChange={() => toggle(it.id)} />
             <span className="checklist-text">{it.text}</span>
-            <input
-              type="time"
-              className="todo-time"
-              value={it.time || ''}
-              title="Set a time for a reminder (optional)"
-              onChange={(e) => setItemTime(it.id, e.target.value)}
-            />
+            <TimeInput value={it.time || ''} onChange={(t) => setItemTime(it.id, t)} />
             <button className="icon-btn" title="Remove" onClick={() => remove(it.id)}>
               ✕
             </button>
@@ -77,13 +72,7 @@ export default function TodoList({ items = [], onChange, notifyState, onEnableNo
           placeholder="આજે શું કરવાનું છે? લખો…"
           onChange={(e) => setText(e.target.value)}
         />
-        <input
-          type="time"
-          className="todo-time"
-          value={time}
-          title="Optional time"
-          onChange={(e) => setTime(e.target.value)}
-        />
+        <TimeInput value={time} onChange={setTime} />
         <button className="btn small" type="submit">
           Add
         </button>

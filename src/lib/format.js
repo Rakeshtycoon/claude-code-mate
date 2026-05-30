@@ -30,6 +30,17 @@ export function formatMoney(amount) {
   return currency.format(n)
 }
 
+// Format a 24-hour "HH:MM" string as 12-hour with AM/PM, e.g. "14:05" -> "2:05 PM".
+export function formatTime12(value) {
+  if (!value) return ''
+  const [H, M] = String(value).split(':').map(Number)
+  if (Number.isNaN(H) || Number.isNaN(M)) return ''
+  const ap = H >= 12 ? 'PM' : 'AM'
+  let h = H % 12
+  if (h === 0) h = 12
+  return `${h}:${String(M).padStart(2, '0')} ${ap}`
+}
+
 // Compact number for chart labels: 1500 -> "1.5k", 2300000 -> "2.3M".
 export function compactNumber(value) {
   const n = Number(value) || 0

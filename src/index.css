@@ -625,14 +625,36 @@ li.done .checklist-text {
   margin: 0;
 }
 
-.todo-time {
-  width: 116px;
-  flex: 0 0 auto;
-  padding: 6px 8px;
-}
-
 .inline-add .todo-text {
   flex: 1;
+  min-width: 140px;
+}
+
+/* 12-hour time picker */
+.time-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.time-input select {
+  width: auto;
+  padding: 6px 4px;
+  font-size: 13px;
+}
+
+.time-colon {
+  color: var(--muted);
+}
+
+/* Let To-Do rows wrap so the time picker drops below the text on narrow screens. */
+.todo-feature .checklist li {
+  flex-wrap: wrap;
+}
+
+.todo-feature .checklist-text {
+  min-width: 55%;
 }
 
 /* ---------- Today's To-Do (featured) ---------- */
