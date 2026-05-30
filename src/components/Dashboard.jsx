@@ -1,9 +1,19 @@
 import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { todayISO, formatMoney } from '../lib/format.js'
+import { todayISO, formatMoney, compactNumber } from '../lib/format.js'
 import { QuoteRotator, Slideshow } from './Inspiration.jsx'
+import BarChart from './charts/BarChart.jsx'
 
-const GOAL_CATS = ['business', 'finance', 'family', 'health', 'pa', 'crazy']
+const GOAL_CATS = [
+  { key: 'business', label: 'Business' },
+  { key: 'finance', label: 'Finance' },
+  { key: 'family', label: 'Family' },
+  { key: 'health', label: 'Health' },
+  { key: 'pa', label: 'PA' },
+  { key: 'crazy', label: 'Crazy' },
+]
+
+const num = (v) => Number(v) || 0
 
 export default function Dashboard({ onNavigate }) {
   const [slideshow, setSlideshow] = useState(false)
@@ -17,14 +27,51 @@ export default function Dashboard({ onNavigate }) {
   const month = date.slice(0, 7)
   const plan = plans[month]
 
-  // Goal status counts.
+  // Goal status counts + per-category progress for the chart.
   let total = 0
   let done = 0
-  for (const cat of GOAL_CATS) {
-    for (const g of goals[cat] || []) {
-      total++
-      if (g.status === 'ok') done++
-    }
+  const goalsByCat = GOAL_CATS.map((cat) => {
+    const list = goals[cat.key] || []
+    const ok = list.filter((g) => g.status === 'ok').length
+    total += list.length
+    done += ok
+    return { label: cat.label, ok, total: list.length }
+  })
+
+  // Monthly comparison: This Year vs Last Year vs Target (sales & profit).
+  const monthlyData = [
+    {
+      label: 'Sales',
+      bars: [
+        { name: 'Last Year', value: num(plan?.lastYear?.sales), color: '#94a3b8' },
+        { name: 'This Year', value: num(plan?.thisYear?.sales), color: '#2563eb' },
+        { name: 'Target', value: num(plan?.target?.sales), color: '#fbbf24' },
+      ],
+    },
+    {
+      label: 'Profit',
+      bars: [
+        { name: 'Last Year', value: num(plan?.lastYear?.profit), color: '#94a3b8' },
+        { name: 'This Year', value: num(plan?.thisYear?.profit), color: '#2563eb' },
+        { name: 'Target', value: num(plan?.target?.profit), color: '#fbbf24' },
+      ],
+    },
+  ]
+
+  // Daily comparison: Sales Target vs Achieved over the last 7 days.
+  const last7 = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const dd = days[key]
+    last7.push({
+      label: String(d.getDate()),
+      bars: [
+        { name: 'Target', value: num(dd?.today?.salesTarget), color: '#93c5fd' },
+        { name: 'Achieved', value: num(dd?.today?.salesAchieved), color: '#ea580c' },
+      ],
+    })
   }
 
   // Today's mantras + tasks.
@@ -99,6 +146,55 @@ export default function Dashboard({ onNavigate }) {
           </span>
         </button>
       </div>
+
+      <section className="card">
+        <div className="chart-head">
+          <h3 className="list-title">📈 Monthly comparison — {new Date().toLocaleDateString(undefined, { month: 'long' })}</h3>
+          <button className="btn small" onClick={() => onNavigate('monthly')}>
+            Edit
+          </button>
+        </div>
+        <BarChart data={monthlyData} format={compactNumber} />
+      </section>
+
+      <section className="card">
+        <div className="chart-head">
+          <h3 className="list-title">🎯 Goals progress by category</h3>
+          <button className="btn small" onClick={() => onNavigate('goals')}>
+            Edit
+          </button>
+        </div>
+        {total === 0 ? (
+          <p className="chart-empty">No goals yet — add some in the Goals tab.</p>
+        ) : (
+          <div className="goal-progress">
+            {goalsByCat.map((c) => {
+              const pct = c.total ? Math.round((c.ok / c.total) * 100) : 0
+              return (
+                <div key={c.label} className="gp-row">
+                  <span className="gp-label">{c.label}</span>
+                  <span className="gp-track">
+                    <span className="gp-fill" style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="gp-count">
+                    {c.ok}/{c.total}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="chart-head">
+          <h3 className="list-title">📅 Daily sales — Target vs Achieved (last 7 days)</h3>
+          <button className="btn small" onClick={() => onNavigate('daily')}>
+            Edit
+          </button>
+        </div>
+        <BarChart data={last7} format={compactNumber} />
+      </section>
 
       <div className="card quick-links">
         <h3 className="list-title">Jump back in</h3>
