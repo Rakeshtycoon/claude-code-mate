@@ -6,7 +6,12 @@
  * @param {number}   [props.height]
  * @param {Function} [props.format]  Formats values shown above bars.
  */
-export default function BarChart({ data = [], height = 200, format = (v) => v }) {
+export default function BarChart({
+  data = [],
+  height = 200,
+  format = (v) => v,
+  scrollable = false,
+}) {
   const hasData = data.some((g) => g.bars.some((b) => Number(b.value) > 0))
 
   if (!hasData) {
@@ -37,12 +42,14 @@ export default function BarChart({ data = [], height = 200, format = (v) => v })
           </span>
         ))}
       </div>
-      <svg
-        className="chart-svg"
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-      >
+      <div className={scrollable ? 'chart-scroll' : ''}>
+        <svg
+          className="chart-svg"
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="xMidYMid meet"
+          style={scrollable ? { width: `${width}px`, maxWidth: 'none' } : undefined}
+          role="img"
+        >
         {/* baseline */}
         <line x1={padX} y1={baseY} x2={width - padX} y2={baseY} stroke="#e2e8f0" />
         {data.map((g, gi) => {
@@ -92,7 +99,8 @@ export default function BarChart({ data = [], height = 200, format = (v) => v })
             </g>
           )
         })}
-      </svg>
+        </svg>
+      </div>
     </div>
   )
 }

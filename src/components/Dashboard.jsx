@@ -3,6 +3,15 @@ import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { todayISO, formatMoney, compactNumber } from '../lib/format.js'
 import { QuoteRotator, Slideshow } from './Inspiration.jsx'
 import BarChart from './charts/BarChart.jsx'
+import DonutChart from './charts/DonutChart.jsx'
+
+const GOAL_STATUS = [
+  { key: 'toStart', name: 'To Start', color: '#9ca3af' },
+  { key: 'ok', name: 'OK', color: '#16a34a' },
+  { key: 'delay', name: 'Delay', color: '#d97706' },
+  { key: 'stuck', name: 'Stuck', color: '#dc2626' },
+  { key: 'cancel', name: 'Cancel', color: '#64748b' },
+]
 
 const GOAL_CATS = [
   { key: 'business', label: 'Business' },
@@ -21,6 +30,7 @@ export default function Dashboard({ onNavigate }) {
   const [goals] = useLocalStorage('bd.goals', {})
   const [days] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
+  const [salesAnalysis] = useLocalStorage('bd.salesAnalysis', {})
 
   const date = todayISO()
   const day = days[date]
@@ -73,6 +83,50 @@ export default function Dashboard({ onNavigate }) {
       ],
     })
   }
+
+  // Daily comparison: Collection Target vs Achieved over the last 7 days.
+  const collection7 = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const dd = days[d.toISOString().slice(0, 10)]
+    collection7.push({
+      label: String(d.getDate()),
+      bars: [
+        { name: 'Target', value: num(dd?.today?.collTarget), color: '#a7f3d0' },
+        { name: 'Achieved', value: num(dd?.today?.collAchieved), color: '#0d9488' },
+      ],
+    })
+  }
+
+  // Sales Analysis: 12 months (financial year Apr→Mar) Target vs Achieved.
+  const fyYear = new Date().getFullYear()
+  const salesYearData = []
+  for (let i = 0; i < 12; i++) {
+    const m = (3 + i) % 12
+    const y = 3 + i < 12 ? fyYear : fyYear + 1
+    const row = salesAnalysis[`${y}-${String(m + 1).padStart(2, '0')}`] || {}
+    salesYearData.push({
+      label: new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short' }),
+      bars: [
+        { name: 'Target', value: num(row.target), color: '#93c5fd' },
+        { name: 'Achieved', value: num(row.achieved), color: '#16a34a' },
+      ],
+    })
+  }
+
+  // Goals status breakdown for the donut.
+  const statusCounts = {}
+  for (const cat of GOAL_CATS) {
+    for (const g of goals[cat.key] || []) {
+      statusCounts[g.status] = (statusCounts[g.status] || 0) + 1
+    }
+  }
+  const donutData = GOAL_STATUS.map((s) => ({
+    name: s.name,
+    value: statusCounts[s.key] || 0,
+    color: s.color,
+  })).filter((d) => d.value > 0)
 
   // Today's mantras + tasks.
   const mantrasDone = day ? Object.values(day.mantras || {}).filter(Boolean).length : 0
@@ -159,6 +213,16 @@ export default function Dashboard({ onNavigate }) {
 
       <section className="card">
         <div className="chart-head">
+          <h3 className="list-title">📊 Sales Analysis — 12 months (Target vs Achieved)</h3>
+          <button className="btn small" onClick={() => onNavigate('monthly')}>
+            Edit
+          </button>
+        </div>
+        <BarChart data={salesYearData} format={compactNumber} scrollable />
+      </section>
+
+      <section className="card">
+        <div className="chart-head">
           <h3 className="list-title">🎯 Goals progress by category</h3>
           <button className="btn small" onClick={() => onNavigate('goals')}>
             Edit
@@ -188,12 +252,32 @@ export default function Dashboard({ onNavigate }) {
 
       <section className="card">
         <div className="chart-head">
+          <h3 className="list-title">🍩 Goals by status</h3>
+          <button className="btn small" onClick={() => onNavigate('goals')}>
+            Edit
+          </button>
+        </div>
+        <DonutChart data={donutData} centerLabel="goals" />
+      </section>
+
+      <section className="card">
+        <div className="chart-head">
           <h3 className="list-title">📅 Daily sales — Target vs Achieved (last 7 days)</h3>
           <button className="btn small" onClick={() => onNavigate('daily')}>
             Edit
           </button>
         </div>
         <BarChart data={last7} format={compactNumber} />
+      </section>
+
+      <section className="card">
+        <div className="chart-head">
+          <h3 className="list-title">💵 Daily collection — Target vs Achieved (last 7 days)</h3>
+          <button className="btn small" onClick={() => onNavigate('daily')}>
+            Edit
+          </button>
+        </div>
+        <BarChart data={collection7} format={compactNumber} />
       </section>
 
       <div className="card quick-links">
