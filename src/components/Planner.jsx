@@ -30,16 +30,16 @@ function buildGrid(ym) {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 const SIZES = [
-  { label: 'Small', value: 11 },
-  { label: 'Medium', value: 13 },
-  { label: 'Large', value: 16 },
-  { label: 'X-Large', value: 20 },
+  { label: 'Small', value: 8 },
+  { label: 'Medium', value: 10 },
+  { label: 'Large', value: 12 },
+  { label: 'X-Large', value: 14 },
 ]
 
 const COLORS = ['#0f172a', '#2563eb', '#16a34a', '#dc2626', '#ea580c', '#7c3aed']
 
 // New notes start black + small. Each note can override this on its own.
-const DEFAULT_STYLE = { fontSize: 11, color: '#0f172a' }
+const DEFAULT_STYLE = { fontSize: 8, color: '#0f172a' }
 
 export default function Planner() {
   const [month, setMonth] = useState(currentMonth())
