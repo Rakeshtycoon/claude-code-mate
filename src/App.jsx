@@ -10,6 +10,7 @@ import Graphs from './components/Graphs.jsx'
 import Backup from './components/Backup.jsx'
 import { runDailyAutoBackup } from './lib/autobackup.js'
 import { useReminders } from './hooks/useReminders.js'
+import { useLocalStorage } from './hooks/useLocalStorage.js'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -38,6 +39,7 @@ const VIEWS = {
 export default function App() {
   const [view, setView] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [profile] = useLocalStorage('bd.profile', {})
 
   // Schedule reminders for timed To-Do tasks (while the app is open).
   useReminders()
@@ -56,10 +58,14 @@ export default function App() {
     <div className="app">
       <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
         <div className="brand">
-          <span className="brand-mark">PA</span>
+          {profile.photo ? (
+            <img className="brand-photo" src={profile.photo} alt="" />
+          ) : (
+            <span className="brand-mark">PA</span>
+          )}
           <div>
-            <div className="brand-name">Business Diary</div>
-            <div className="brand-sub">I am my word.</div>
+            <div className="brand-name">{profile.name || 'Business Diary'}</div>
+            <div className="brand-sub">{profile.name ? 'Business Diary' : 'I am my word.'}</div>
           </div>
         </div>
         <nav>
