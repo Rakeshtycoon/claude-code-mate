@@ -820,6 +820,20 @@ li.done .checklist-text {
   padding-left: 22px;
 }
 
+/* Read-only money cell in the Daily "Month" target table. */
+.target-ro {
+  display: inline-block;
+  padding: 6px 2px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.head-note {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* ---------- Read-only Last Year rows ---------- */
 .readonly-row {
   display: flex;

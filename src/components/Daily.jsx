@@ -1,5 +1,6 @@
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { todayISO, formatDate, uid } from '../lib/format.js'
+import { todayISO, formatDate, formatMoney, uid } from '../lib/format.js'
+import { monthAchieved } from '../lib/totals.js'
 import { useMemo, useState } from 'react'
 import EditableList from './EditableList.jsx'
 import TodoList from './TodoList.jsx'
@@ -84,10 +85,18 @@ function shiftDate(iso, days) {
   return d.toISOString().slice(0, 10)
 }
 
-function TargetTable({ label, data, onChange }) {
+function TargetTable({ label, data, onChange, readOnly = false, hint }) {
   function set(field, value) {
     onChange({ ...data, [field]: value })
   }
+  const cell = (field) =>
+    readOnly ? (
+      <span className="target-ro">{data[field] ? formatMoney(data[field]) : '—'}</span>
+    ) : (
+      <span className="rupee">
+        <input type="number" value={data[field]} onChange={(e) => set(field, e.target.value)} />
+      </span>
+    )
   return (
     <div className="target-block">
       <div className="target-title">{label}</div>
@@ -102,54 +111,24 @@ function TargetTable({ label, data, onChange }) {
         <tbody>
           <tr>
             <th>Sales</th>
-            <td>
-              <span className="rupee">
-                <input
-                  type="number"
-                  value={data.salesTarget}
-                  onChange={(e) => set('salesTarget', e.target.value)}
-                />
-              </span>
-            </td>
-            <td>
-              <span className="rupee">
-                <input
-                  type="number"
-                  value={data.salesAchieved}
-                  onChange={(e) => set('salesAchieved', e.target.value)}
-                />
-              </span>
-            </td>
+            <td>{cell('salesTarget')}</td>
+            <td>{cell('salesAchieved')}</td>
           </tr>
           <tr>
             <th>Collection</th>
-            <td>
-              <span className="rupee">
-                <input
-                  type="number"
-                  value={data.collTarget}
-                  onChange={(e) => set('collTarget', e.target.value)}
-                />
-              </span>
-            </td>
-            <td>
-              <span className="rupee">
-                <input
-                  type="number"
-                  value={data.collAchieved}
-                  onChange={(e) => set('collAchieved', e.target.value)}
-                />
-              </span>
-            </td>
+            <td>{cell('collTarget')}</td>
+            <td>{cell('collAchieved')}</td>
           </tr>
         </tbody>
       </table>
+      {hint && <p className="small-note">{hint}</p>}
     </div>
   )
 }
 
 export default function Daily() {
   const [days, setDays] = useLocalStorage('bd.days', {})
+  const [plans] = useLocalStorage('bd.monthlyPlans', {})
   const [date, setDate] = useState(todayISO())
   const [notifyState, setNotifyState] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
@@ -162,6 +141,17 @@ export default function Daily() {
   }
 
   const day = days[date] || emptyDay()
+
+  // The "Month" block is derived, not edited: target from the Monthly plan,
+  // achieved rolled up from each day's "Today" achieved in the same month.
+  const ym = date.slice(0, 7)
+  const monthAch = monthAchieved(days, ym)
+  const monthData = {
+    salesTarget: plans[ym]?.target?.sales || '',
+    salesAchieved: monthAch.sales || '',
+    collTarget: plans[ym]?.target?.collection || '',
+    collAchieved: monthAch.collection || '',
+  }
 
   function updateDay(next) {
     setDays({ ...days, [date]: next })
@@ -277,8 +267,9 @@ export default function Daily() {
         <div className="card">
           <TargetTable
             label="Month"
-            data={day.month}
-            onChange={(month) => updateDay({ ...day, month })}
+            readOnly
+            data={monthData}
+            hint="Target comes from Monthly. Achieved adds up each day’s achieved below."
           />
         </div>
         <div className="card">

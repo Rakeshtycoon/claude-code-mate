@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { formatMoney } from '../lib/format.js'
+import { monthAchieved } from '../lib/totals.js'
 import EditableList from './EditableList.jsx'
 
 function currentMonth() {
@@ -32,8 +33,6 @@ function emptyPlan() {
   return {
     comparison: '',
     target: { sales: '', collection: '', profit: '', other: '' },
-    achieved: '',
-    achievedCollection: '',
     noAction: [],
   }
 }
@@ -71,6 +70,8 @@ function PlanTab() {
   const [plans, setPlans] = useLocalStorage('bd.monthlyPlans', {})
   // Actual figures per month, keyed by absolute YYYY-MM and shared across years.
   const [actuals, setActuals] = useLocalStorage('bd.monthlyActuals', {})
+  // Daily entries — the Achieved totals are rolled up from these.
+  const [days] = useLocalStorage('bd.days', {})
   const [month, setMonth] = useState(currentMonth())
   const [editLastYear, setEditLastYear] = useState(false)
   const plan = plans[month] || emptyPlan()
@@ -93,8 +94,10 @@ function PlanTab() {
     })
   }
 
-  const achievedPct = pct(plan.achieved, plan.target.sales)
-  const collectionPct = pct(plan.achievedCollection, plan.target.collection)
+  // Achieved is the sum of each day's achieved Sales/Collection this month.
+  const ach = monthAchieved(days, month)
+  const achievedPct = pct(ach.sales, plan.target.sales)
+  const collectionPct = pct(ach.collection, plan.target.collection)
 
   return (
     <div>
@@ -171,23 +174,34 @@ function PlanTab() {
       </div>
 
       <div className="card form">
-        <h3 className="list-title">Achieved</h3>
+        <h3 className="list-title">
+          Achieved <span className="head-note">— auto from Daily</span>
+        </h3>
         <div className="grid-2">
           <div>
-            <MoneyRow label="Achieved Sales" value={plan.achieved} onChange={(v) => update({ ...plan, achieved: v })} />
+            <div className="readonly-row">
+              <span>Achieved Sales</span>
+              <strong>{ach.sales ? formatMoney(ach.sales) : '—'}</strong>
+            </div>
             <div className="achieved-pct">
               Sales achieved
               <strong>{achievedPct === null ? ' —' : ` ${achievedPct}%`}</strong>
             </div>
           </div>
           <div>
-            <MoneyRow label="Achieved Collection" value={plan.achievedCollection || ''} onChange={(v) => update({ ...plan, achievedCollection: v })} />
+            <div className="readonly-row">
+              <span>Achieved Collection</span>
+              <strong>{ach.collection ? formatMoney(ach.collection) : '—'}</strong>
+            </div>
             <div className="achieved-pct">
               Collection achieved
               <strong>{collectionPct === null ? ' —' : ` ${collectionPct}%`}</strong>
             </div>
           </div>
         </div>
+        <p className="small-note">
+          Adds up each day’s achieved Sales &amp; Collection from the Daily page.
+        </p>
       </div>
 
       <EditableList
