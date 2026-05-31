@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import EditableList from './EditableList.jsx'
 
@@ -83,27 +83,15 @@ function PlanTab() {
         </div>
 
         <div className="card form">
-          <h3 className="list-title">This Year &amp; Target</h3>
-          <div className="metric-grid">
-            <span className="col-head" />
-            <span className="col-head">This Year</span>
-            <span className="col-head">Target</span>
-            {PLAN_METRICS.map(({ field, label }) => (
-              <Fragment key={field}>
-                <span className="row-label">{label}</span>
-                <input
-                  type="number"
-                  value={plan.thisYear[field] || ''}
-                  onChange={(e) => setGroup('thisYear', field, e.target.value)}
-                />
-                <input
-                  type="number"
-                  value={plan.target[field] || ''}
-                  onChange={(e) => setGroup('target', field, e.target.value)}
-                />
-              </Fragment>
-            ))}
-          </div>
+          <h3 className="list-title">Target</h3>
+          {PLAN_METRICS.map(({ field, label }) => (
+            <MoneyRow
+              key={field}
+              label={label}
+              value={plan.target[field] || ''}
+              onChange={(v) => setGroup('target', field, v)}
+            />
+          ))}
           <label className="field" style={{ marginTop: 14 }}>
             <span>Comparison</span>
             <div className="toggle">
