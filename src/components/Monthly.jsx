@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import EditableList from './EditableList.jsx'
 
@@ -23,14 +23,23 @@ function pct(achieved, target) {
 
 function emptyPlan() {
   return {
-    lastYear: { sales: '', profit: '', purchase: '', expense: '', other: '' },
-    thisYear: { sales: '', profit: '', other: '' },
+    lastYear: { sales: '', collection: '', profit: '', purchase: '', expense: '', other: '' },
+    thisYear: { sales: '', collection: '', profit: '', other: '' },
     comparison: '',
-    target: { sales: '', profit: '', other: '' },
+    target: { sales: '', collection: '', profit: '', other: '' },
     achieved: '',
+    achievedCollection: '',
     noAction: [],
   }
 }
+
+// Metrics shown side-by-side as "This Year" vs "Target".
+const PLAN_METRICS = [
+  { field: 'sales', label: 'Sales' },
+  { field: 'collection', label: 'Collection' },
+  { field: 'profit', label: 'Profit' },
+  { field: 'other', label: 'Other' },
+]
 
 function MoneyRow({ label, value, onChange }) {
   return (
@@ -53,6 +62,7 @@ function PlanTab() {
     update({ ...plan, [group]: { ...plan[group], [field]: value } })
 
   const achievedPct = pct(plan.achieved, plan.target.sales)
+  const collectionPct = pct(plan.achievedCollection, plan.target.collection)
 
   return (
     <div>
@@ -65,6 +75,7 @@ function PlanTab() {
         <div className="card form">
           <h3 className="list-title">Last Year</h3>
           <MoneyRow label="Sales" value={plan.lastYear.sales} onChange={(v) => setGroup('lastYear', 'sales', v)} />
+          <MoneyRow label="Collection" value={plan.lastYear.collection || ''} onChange={(v) => setGroup('lastYear', 'collection', v)} />
           <MoneyRow label="Profit" value={plan.lastYear.profit} onChange={(v) => setGroup('lastYear', 'profit', v)} />
           <MoneyRow label="Purchase" value={plan.lastYear.purchase} onChange={(v) => setGroup('lastYear', 'purchase', v)} />
           <MoneyRow label="Expense" value={plan.lastYear.expense} onChange={(v) => setGroup('lastYear', 'expense', v)} />
@@ -72,11 +83,28 @@ function PlanTab() {
         </div>
 
         <div className="card form">
-          <h3 className="list-title">This Year</h3>
-          <MoneyRow label="Sales" value={plan.thisYear.sales} onChange={(v) => setGroup('thisYear', 'sales', v)} />
-          <MoneyRow label="Profit" value={plan.thisYear.profit} onChange={(v) => setGroup('thisYear', 'profit', v)} />
-          <MoneyRow label="Other" value={plan.thisYear.other} onChange={(v) => setGroup('thisYear', 'other', v)} />
-          <label className="field">
+          <h3 className="list-title">This Year &amp; Target</h3>
+          <div className="metric-grid">
+            <span className="col-head" />
+            <span className="col-head">This Year</span>
+            <span className="col-head">Target</span>
+            {PLAN_METRICS.map(({ field, label }) => (
+              <Fragment key={field}>
+                <span className="row-label">{label}</span>
+                <input
+                  type="number"
+                  value={plan.thisYear[field] || ''}
+                  onChange={(e) => setGroup('thisYear', field, e.target.value)}
+                />
+                <input
+                  type="number"
+                  value={plan.target[field] || ''}
+                  onChange={(e) => setGroup('target', field, e.target.value)}
+                />
+              </Fragment>
+            ))}
+          </div>
+          <label className="field" style={{ marginTop: 14 }}>
             <span>Comparison</span>
             <div className="toggle">
               {['Growth', 'Same', 'De Growth'].map((c) => (
@@ -94,20 +122,22 @@ function PlanTab() {
         </div>
       </div>
 
-      <div className="grid-2">
-        <div className="card form">
-          <h3 className="list-title">Target</h3>
-          <MoneyRow label="Sales" value={plan.target.sales} onChange={(v) => setGroup('target', 'sales', v)} />
-          <MoneyRow label="Profit" value={plan.target.profit} onChange={(v) => setGroup('target', 'profit', v)} />
-          <MoneyRow label="Other" value={plan.target.other} onChange={(v) => setGroup('target', 'other', v)} />
-        </div>
-
-        <div className="card form">
-          <h3 className="list-title">Achieved</h3>
-          <MoneyRow label="Achieved Sales" value={plan.achieved} onChange={(v) => update({ ...plan, achieved: v })} />
-          <div className="achieved-pct">
-            What percentage was achieved?
-            <strong>{achievedPct === null ? ' —' : ` ${achievedPct}%`}</strong>
+      <div className="card form">
+        <h3 className="list-title">Achieved</h3>
+        <div className="grid-2">
+          <div>
+            <MoneyRow label="Achieved Sales" value={plan.achieved} onChange={(v) => update({ ...plan, achieved: v })} />
+            <div className="achieved-pct">
+              Sales achieved
+              <strong>{achievedPct === null ? ' —' : ` ${achievedPct}%`}</strong>
+            </div>
+          </div>
+          <div>
+            <MoneyRow label="Achieved Collection" value={plan.achievedCollection || ''} onChange={(v) => update({ ...plan, achievedCollection: v })} />
+            <div className="achieved-pct">
+              Collection achieved
+              <strong>{collectionPct === null ? ' —' : ` ${collectionPct}%`}</strong>
+            </div>
           </div>
         </div>
       </div>
