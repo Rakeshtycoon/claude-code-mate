@@ -3,6 +3,15 @@ import { compactNumber } from '../lib/format.js'
 import BarChart from './charts/BarChart.jsx'
 import DonutChart from './charts/DonutChart.jsx'
 
+// Compact rupee label for chart axes/values, e.g. 150000 -> "₹1.5L".
+const rupee = (v) => `₹${compactNumber(v)}`
+
+// Same month, one year earlier (e.g. "2026-05" -> "2025-05").
+function lastYearMonth(ym) {
+  const [y, m] = ym.split('-')
+  return `${Number(y) - 1}-${m}`
+}
+
 const GOAL_CATS = [
   { key: 'business', label: 'Business' },
   { key: 'finance', label: 'Finance' },
@@ -26,10 +35,12 @@ export default function Graphs({ onNavigate }) {
   const [goals] = useLocalStorage('bd.goals', {})
   const [days] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
+  const [actuals] = useLocalStorage('bd.monthlyActuals', {})
   const [salesAnalysis] = useLocalStorage('bd.salesAnalysis', {})
 
   const month = new Date().toISOString().slice(0, 7)
   const plan = plans[month]
+  const lastYear = actuals[lastYearMonth(month)] || {}
 
   // Goals progress per category + status counts.
   let totalGoals = 0
@@ -50,21 +61,19 @@ export default function Graphs({ onNavigate }) {
     color: s.color,
   })).filter((d) => d.value > 0)
 
-  // Monthly: This Year vs Last Year vs Target (sales & profit).
+  // Monthly: Last Year vs Target (sales & profit).
   const monthlyData = [
     {
       label: 'Sales',
       bars: [
-        { name: 'Last Year', value: num(plan?.lastYear?.sales), color: '#94a3b8' },
-        { name: 'This Year', value: num(plan?.thisYear?.sales), color: '#2563eb' },
+        { name: 'Last Year', value: num(lastYear.sales), color: '#94a3b8' },
         { name: 'Target', value: num(plan?.target?.sales), color: '#fbbf24' },
       ],
     },
     {
       label: 'Profit',
       bars: [
-        { name: 'Last Year', value: num(plan?.lastYear?.profit), color: '#94a3b8' },
-        { name: 'This Year', value: num(plan?.thisYear?.profit), color: '#2563eb' },
+        { name: 'Last Year', value: num(lastYear.profit), color: '#94a3b8' },
         { name: 'Target', value: num(plan?.target?.profit), color: '#fbbf24' },
       ],
     },
@@ -126,7 +135,7 @@ export default function Graphs({ onNavigate }) {
           </h3>
           <button className="btn small" onClick={() => onNavigate('monthly')}>Edit</button>
         </div>
-        <BarChart data={monthlyData} format={compactNumber} />
+        <BarChart data={monthlyData} format={rupee} />
       </section>
 
       <section className="card">
@@ -134,7 +143,7 @@ export default function Graphs({ onNavigate }) {
           <h3 className="list-title">📊 Sales Analysis — 12 months (Target vs Achieved)</h3>
           <button className="btn small" onClick={() => onNavigate('monthly')}>Edit</button>
         </div>
-        <BarChart data={salesYearData} format={compactNumber} scrollable />
+        <BarChart data={salesYearData} format={rupee} scrollable />
       </section>
 
       <section className="card">
@@ -175,7 +184,7 @@ export default function Graphs({ onNavigate }) {
           <h3 className="list-title">📅 Daily sales — Target vs Achieved (last 7 days)</h3>
           <button className="btn small" onClick={() => onNavigate('daily')}>Edit</button>
         </div>
-        <BarChart data={sales7} format={compactNumber} />
+        <BarChart data={sales7} format={rupee} />
       </section>
 
       <section className="card">
@@ -183,7 +192,7 @@ export default function Graphs({ onNavigate }) {
           <h3 className="list-title">💵 Daily collection — Target vs Achieved (last 7 days)</h3>
           <button className="btn small" onClick={() => onNavigate('daily')}>Edit</button>
         </div>
-        <BarChart data={collection7} format={compactNumber} />
+        <BarChart data={collection7} format={rupee} />
       </section>
     </div>
   )

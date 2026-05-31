@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
+import { formatMoney } from '../lib/format.js'
 import EditableList from './EditableList.jsx'
 
 function currentMonth() {
@@ -59,7 +60,9 @@ function MoneyRow({ label, value, onChange }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <input type="number" value={value} onChange={(e) => onChange(e.target.value)} />
+      <span className="rupee">
+        <input type="number" value={value} onChange={(e) => onChange(e.target.value)} />
+      </span>
     </label>
   )
 }
@@ -128,7 +131,7 @@ function PlanTab() {
             : LAST_YEAR_METRICS.map(({ field, label }) => (
                 <div key={field} className="readonly-row">
                   <span>{label}</span>
-                  <strong>{lastYearData[field] ? lastYearData[field] : '—'}</strong>
+                  <strong>{lastYearData[field] ? formatMoney(lastYearData[field]) : '—'}</strong>
                 </div>
               ))}
 
@@ -245,9 +248,9 @@ function SalesTab() {
               return (
                 <tr key={key}>
                   <td>{new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</td>
-                  <td><input type="number" value={row.lastYear || ''} onChange={(e) => setCell(key, 'lastYear', e.target.value)} /></td>
-                  <td><input type="number" value={row.target || ''} onChange={(e) => setCell(key, 'target', e.target.value)} /></td>
-                  <td><input type="number" value={row.achieved || ''} onChange={(e) => setCell(key, 'achieved', e.target.value)} /></td>
+                  <td><span className="rupee"><input type="number" value={row.lastYear || ''} onChange={(e) => setCell(key, 'lastYear', e.target.value)} /></span></td>
+                  <td><span className="rupee"><input type="number" value={row.target || ''} onChange={(e) => setCell(key, 'target', e.target.value)} /></span></td>
+                  <td><span className="rupee"><input type="number" value={row.achieved || ''} onChange={(e) => setCell(key, 'achieved', e.target.value)} /></span></td>
                   <td className="right">{p === null ? '—' : `${p}%`}</td>
                   <td><input type="text" value={row.remark || ''} onChange={(e) => setCell(key, 'remark', e.target.value)} /></td>
                 </tr>

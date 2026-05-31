@@ -19,9 +19,10 @@ export function formatDate(iso) {
   })
 }
 
-const currency = new Intl.NumberFormat(undefined, {
+const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'INR',
+  minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 })
 

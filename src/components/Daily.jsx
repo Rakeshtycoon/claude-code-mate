@@ -103,35 +103,43 @@ function TargetTable({ label, data, onChange }) {
           <tr>
             <th>Sales</th>
             <td>
-              <input
-                type="number"
-                value={data.salesTarget}
-                onChange={(e) => set('salesTarget', e.target.value)}
-              />
+              <span className="rupee">
+                <input
+                  type="number"
+                  value={data.salesTarget}
+                  onChange={(e) => set('salesTarget', e.target.value)}
+                />
+              </span>
             </td>
             <td>
-              <input
-                type="number"
-                value={data.salesAchieved}
-                onChange={(e) => set('salesAchieved', e.target.value)}
-              />
+              <span className="rupee">
+                <input
+                  type="number"
+                  value={data.salesAchieved}
+                  onChange={(e) => set('salesAchieved', e.target.value)}
+                />
+              </span>
             </td>
           </tr>
           <tr>
             <th>Collection</th>
             <td>
-              <input
-                type="number"
-                value={data.collTarget}
-                onChange={(e) => set('collTarget', e.target.value)}
-              />
+              <span className="rupee">
+                <input
+                  type="number"
+                  value={data.collTarget}
+                  onChange={(e) => set('collTarget', e.target.value)}
+                />
+              </span>
             </td>
             <td>
-              <input
-                type="number"
-                value={data.collAchieved}
-                onChange={(e) => set('collAchieved', e.target.value)}
-              />
+              <span className="rupee">
+                <input
+                  type="number"
+                  value={data.collAchieved}
+                  onChange={(e) => set('collAchieved', e.target.value)}
+                />
+              </span>
             </td>
           </tr>
         </tbody>

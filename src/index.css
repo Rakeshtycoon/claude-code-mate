@@ -799,6 +799,27 @@ li.done .checklist-text {
   cursor: pointer;
 }
 
+/* ---------- Rupee-prefixed money inputs ---------- */
+.rupee {
+  position: relative;
+  display: block;
+}
+
+.rupee::before {
+  content: '₹';
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.rupee input {
+  padding-left: 22px;
+}
+
 /* ---------- Read-only Last Year rows ---------- */
 .readonly-row {
   display: flex;
