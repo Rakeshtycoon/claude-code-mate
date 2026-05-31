@@ -14,6 +14,12 @@ function monthLabel(ym) {
   })
 }
 
+// Same month, one year earlier (e.g. "2026-05" -> "2025-05").
+function lastYearMonth(ym) {
+  const [y, m] = ym.split('-')
+  return `${Number(y) - 1}-${m}`
+}
+
 function pct(achieved, target) {
   const a = Number(achieved)
   const t = Number(target)
@@ -23,8 +29,6 @@ function pct(achieved, target) {
 
 function emptyPlan() {
   return {
-    lastYear: { sales: '', collection: '', profit: '', purchase: '', expense: '', other: '' },
-    thisYear: { sales: '', collection: '', profit: '', other: '' },
     comparison: '',
     target: { sales: '', collection: '', profit: '', other: '' },
     achieved: '',
@@ -33,11 +37,21 @@ function emptyPlan() {
   }
 }
 
-// Metrics shown side-by-side as "This Year" vs "Target".
+// Target / Achieved metrics.
 const PLAN_METRICS = [
   { field: 'sales', label: 'Sales' },
   { field: 'collection', label: 'Collection' },
   { field: 'profit', label: 'Profit' },
+  { field: 'other', label: 'Other' },
+]
+
+// Last Year figures (the actuals recorded for that month a year ago).
+const LAST_YEAR_METRICS = [
+  { field: 'sales', label: 'Sales' },
+  { field: 'collection', label: 'Collection' },
+  { field: 'profit', label: 'Profit' },
+  { field: 'purchase', label: 'Purchase' },
+  { field: 'expense', label: 'Expense' },
   { field: 'other', label: 'Other' },
 ]
 
@@ -52,14 +66,29 @@ function MoneyRow({ label, value, onChange }) {
 
 function PlanTab() {
   const [plans, setPlans] = useLocalStorage('bd.monthlyPlans', {})
+  // Actual figures per month, keyed by absolute YYYY-MM and shared across years.
+  const [actuals, setActuals] = useLocalStorage('bd.monthlyActuals', {})
   const [month, setMonth] = useState(currentMonth())
+  const [editLastYear, setEditLastYear] = useState(false)
   const plan = plans[month] || emptyPlan()
+
+  // "Last Year" is the same month one year ago — read from the shared store.
+  const lastYearKey = lastYearMonth(month)
+  const lastYearData = actuals[lastYearKey] || {}
 
   function update(next) {
     setPlans({ ...plans, [month]: next })
   }
   const setGroup = (group, field, value) =>
     update({ ...plan, [group]: { ...plan[group], [field]: value } })
+
+  // Edits to Last Year write back to that month's actuals record.
+  function setLastYearField(field, value) {
+    setActuals({
+      ...actuals,
+      [lastYearKey]: { ...lastYearData, [field]: value },
+    })
+  }
 
   const achievedPct = pct(plan.achieved, plan.target.sales)
   const collectionPct = pct(plan.achievedCollection, plan.target.collection)
@@ -68,18 +97,46 @@ function PlanTab() {
     <div>
       <div className="list-head">
         <h2>My Monthly Plan — {monthLabel(month)}</h2>
-        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => {
+            setMonth(e.target.value)
+            setEditLastYear(false)
+          }}
+        />
       </div>
 
       <div className="grid-2">
         <div className="card form">
-          <h3 className="list-title">Last Year</h3>
-          <MoneyRow label="Sales" value={plan.lastYear.sales} onChange={(v) => setGroup('lastYear', 'sales', v)} />
-          <MoneyRow label="Collection" value={plan.lastYear.collection || ''} onChange={(v) => setGroup('lastYear', 'collection', v)} />
-          <MoneyRow label="Profit" value={plan.lastYear.profit} onChange={(v) => setGroup('lastYear', 'profit', v)} />
-          <MoneyRow label="Purchase" value={plan.lastYear.purchase} onChange={(v) => setGroup('lastYear', 'purchase', v)} />
-          <MoneyRow label="Expense" value={plan.lastYear.expense} onChange={(v) => setGroup('lastYear', 'expense', v)} />
-          <MoneyRow label="Other" value={plan.lastYear.other} onChange={(v) => setGroup('lastYear', 'other', v)} />
+          <div className="list-head-row">
+            <h3 className="list-title">Last Year — {monthLabel(lastYearKey)}</h3>
+            <button className="btn small" type="button" onClick={() => setEditLastYear((v) => !v)}>
+              {editLastYear ? '✓ Done' : 'Edit'}
+            </button>
+          </div>
+
+          {editLastYear
+            ? LAST_YEAR_METRICS.map(({ field, label }) => (
+                <MoneyRow
+                  key={field}
+                  label={label}
+                  value={lastYearData[field] || ''}
+                  onChange={(v) => setLastYearField(field, v)}
+                />
+              ))
+            : LAST_YEAR_METRICS.map(({ field, label }) => (
+                <div key={field} className="readonly-row">
+                  <span>{label}</span>
+                  <strong>{lastYearData[field] ? lastYearData[field] : '—'}</strong>
+                </div>
+              ))}
+
+          <p className="small-note">
+            {editLastYear
+              ? `Saving to ${monthLabel(lastYearKey)} — these become last-year figures everywhere.`
+              : `Auto-filled from ${monthLabel(lastYearKey)}. Tap Edit to adjust.`}
+          </p>
         </div>
 
         <div className="card form">

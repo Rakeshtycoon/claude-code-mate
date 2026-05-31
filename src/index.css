@@ -799,6 +799,28 @@ li.done .checklist-text {
   cursor: pointer;
 }
 
+/* ---------- Read-only Last Year rows ---------- */
+.readonly-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.readonly-row:last-of-type {
+  border-bottom: none;
+}
+
+.readonly-row span {
+  color: var(--muted);
+}
+
+.readonly-row strong {
+  color: var(--text);
+}
+
 /* ---------- This Year / Target metric grid ---------- */
 .metric-grid {
   display: grid;
