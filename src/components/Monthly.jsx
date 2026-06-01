@@ -29,6 +29,14 @@ function pct(achieved, target) {
   return Math.round((a / t) * 100)
 }
 
+// Growth of this year's target over last year, as a signed percentage.
+function growthPct(target, lastYear) {
+  const t = Number(target)
+  const b = Number(lastYear)
+  if (!b || !t) return null
+  return Math.round(((t - b) / b) * 100)
+}
+
 function emptyPlan() {
   return {
     comparison: '',
@@ -266,6 +274,7 @@ function SalesTab() {
               <th>Month</th>
               <th className="right">Last Year</th>
               <th className="right">Sales Target</th>
+              <th className="right">Growth</th>
               <th className="right">Achieved</th>
               <th className="right">%</th>
               <th>Remark</th>
@@ -278,11 +287,21 @@ function SalesTab() {
               const achievedSales = monthAchieved(days, key).sales
               const p = pct(achievedSales, targetSales)
               const lastYearSales = actuals[lastYearMonth(key)]?.sales
+              const g = growthPct(targetSales, lastYearSales)
               return (
                 <tr key={key}>
                   <td>{new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</td>
                   <td className="right"><span className="cell-ro">{lastYearSales ? formatMoney(lastYearSales) : '—'}</span></td>
                   <td><span className="rupee"><input type="number" value={targetSales} onChange={(e) => setTargetSales(key, e.target.value)} /></span></td>
+                  <td className="right">
+                    {g === null ? (
+                      '—'
+                    ) : (
+                      <span className={g >= 0 ? 'growth-up' : 'growth-down'}>
+                        {g >= 0 ? '▲' : '▼'} {Math.abs(g)}%
+                      </span>
+                    )}
+                  </td>
                   <td className="right"><span className="cell-ro">{achievedSales ? formatMoney(achievedSales) : '—'}</span></td>
                   <td className="right">{p === null ? '—' : `${p}%`}</td>
                   <td><input type="text" value={row.remark || ''} onChange={(e) => setCell(key, 'remark', e.target.value)} /></td>
@@ -293,9 +312,9 @@ function SalesTab() {
         </table>
       </div>
       <p className="small-note">
-        Last Year is auto-filled from a year ago. Sales Target set here reflects into
-        Monthly Plan → Target → Sales. Achieved &amp; % come automatically from the
-        Daily page (not editable).
+        Last Year is auto-filled from a year ago. Sales Target reflects into Monthly
+        Plan → Target → Sales. Growth compares Target with Last Year (green = growth,
+        red = de-growth). Achieved &amp; % come automatically from the Daily page.
       </p>
     </div>
   )

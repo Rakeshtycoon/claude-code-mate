@@ -842,6 +842,19 @@ li.done .checklist-text {
   color: var(--text);
 }
 
+/* Growth / de-growth percentage colours. */
+.growth-up {
+  color: #16a34a;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.growth-down {
+  color: #dc2626;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* ---------- Read-only Last Year rows ---------- */
 .readonly-row {
   display: flex;
