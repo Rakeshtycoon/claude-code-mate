@@ -146,7 +146,9 @@ function PlanTab() {
         </div>
 
         <div className="card form">
-          <h3 className="list-title">Target</h3>
+          <h3 className="list-title">
+            Target <span className="head-note">— Sales is shared with Yearly Plan</span>
+          </h3>
           {PLAN_METRICS.map(({ field, label }) => (
             <MoneyRow
               key={field}
@@ -216,6 +218,9 @@ function PlanTab() {
 
 function SalesTab() {
   const [rows, setRows] = useLocalStorage('bd.salesAnalysis', {})
+  // Sales Target is shared with the Monthly Plan — set it here once a year and
+  // it reflects into Monthly Plan → Target → Sales for each month.
+  const [plans, setPlans] = useLocalStorage('bd.monthlyPlans', {})
   // Last Year column is auto-filled from the shared actuals store (the same
   // figures edited in the Monthly Plan "Last Year" section).
   const [actuals] = useLocalStorage('bd.monthlyActuals', {})
@@ -230,8 +235,14 @@ function SalesTab() {
   }
 
   function setCell(key, field, value) {
-    const row = rows[key] || { target: '', achieved: '', remark: '' }
+    const row = rows[key] || { achieved: '', remark: '' }
     setRows({ ...rows, [key]: { ...row, [field]: value } })
+  }
+
+  // Writes to the Monthly Plan target so both tabs stay in sync.
+  function setTargetSales(key, value) {
+    const plan = plans[key] || emptyPlan()
+    setPlans({ ...plans, [key]: { ...plan, target: { ...plan.target, sales: value } } })
   }
 
   return (
@@ -252,7 +263,7 @@ function SalesTab() {
             <tr>
               <th>Month</th>
               <th className="right">Last Year</th>
-              <th className="right">Target</th>
+              <th className="right">Sales Target</th>
               <th className="right">Achieved</th>
               <th className="right">%</th>
               <th>Remark</th>
@@ -261,13 +272,14 @@ function SalesTab() {
           <tbody>
             {months.map(({ key, m, y }) => {
               const row = rows[key] || {}
-              const p = pct(row.achieved, row.target)
+              const targetSales = plans[key]?.target?.sales || ''
+              const p = pct(row.achieved, targetSales)
               const lastYearSales = actuals[lastYearMonth(key)]?.sales
               return (
                 <tr key={key}>
                   <td>{new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</td>
                   <td className="right"><span className="cell-ro">{lastYearSales ? formatMoney(lastYearSales) : '—'}</span></td>
-                  <td><span className="rupee"><input type="number" value={row.target || ''} onChange={(e) => setCell(key, 'target', e.target.value)} /></span></td>
+                  <td><span className="rupee"><input type="number" value={targetSales} onChange={(e) => setTargetSales(key, e.target.value)} /></span></td>
                   <td><span className="rupee"><input type="number" value={row.achieved || ''} onChange={(e) => setCell(key, 'achieved', e.target.value)} /></span></td>
                   <td className="right">{p === null ? '—' : `${p}%`}</td>
                   <td><input type="text" value={row.remark || ''} onChange={(e) => setCell(key, 'remark', e.target.value)} /></td>
@@ -278,8 +290,8 @@ function SalesTab() {
         </table>
       </div>
       <p className="small-note">
-        Last Year is auto-filled from the same month a year ago. Edit those figures in
-        Monthly Plan → Last Year.
+        Last Year is auto-filled from a year ago. Sales Target set here reflects into
+        Monthly Plan → Target → Sales for each month.
       </p>
     </div>
   )
