@@ -224,6 +224,8 @@ function SalesTab() {
   // Last Year column is auto-filled from the shared actuals store (the same
   // figures edited in the Monthly Plan "Last Year" section).
   const [actuals] = useLocalStorage('bd.monthlyActuals', {})
+  // Achieved is rolled up from the Daily page, same as Monthly Plan → Achieved.
+  const [days] = useLocalStorage('bd.days', {})
   const [year, setYear] = useState(new Date().getFullYear())
 
   // April (year) → March (year+1), matching the diary's financial-year layout.
@@ -235,7 +237,7 @@ function SalesTab() {
   }
 
   function setCell(key, field, value) {
-    const row = rows[key] || { achieved: '', remark: '' }
+    const row = rows[key] || { remark: '' }
     setRows({ ...rows, [key]: { ...row, [field]: value } })
   }
 
@@ -273,14 +275,15 @@ function SalesTab() {
             {months.map(({ key, m, y }) => {
               const row = rows[key] || {}
               const targetSales = plans[key]?.target?.sales || ''
-              const p = pct(row.achieved, targetSales)
+              const achievedSales = monthAchieved(days, key).sales
+              const p = pct(achievedSales, targetSales)
               const lastYearSales = actuals[lastYearMonth(key)]?.sales
               return (
                 <tr key={key}>
                   <td>{new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</td>
                   <td className="right"><span className="cell-ro">{lastYearSales ? formatMoney(lastYearSales) : '—'}</span></td>
                   <td><span className="rupee"><input type="number" value={targetSales} onChange={(e) => setTargetSales(key, e.target.value)} /></span></td>
-                  <td><span className="rupee"><input type="number" value={row.achieved || ''} onChange={(e) => setCell(key, 'achieved', e.target.value)} /></span></td>
+                  <td className="right"><span className="cell-ro">{achievedSales ? formatMoney(achievedSales) : '—'}</span></td>
                   <td className="right">{p === null ? '—' : `${p}%`}</td>
                   <td><input type="text" value={row.remark || ''} onChange={(e) => setCell(key, 'remark', e.target.value)} /></td>
                 </tr>
@@ -291,7 +294,8 @@ function SalesTab() {
       </div>
       <p className="small-note">
         Last Year is auto-filled from a year ago. Sales Target set here reflects into
-        Monthly Plan → Target → Sales for each month.
+        Monthly Plan → Target → Sales. Achieved &amp; % come automatically from the
+        Daily page (not editable).
       </p>
     </div>
   )
