@@ -140,7 +140,7 @@ export default function Graphs({ onNavigate }) {
 
       <section className="card">
         <div className="chart-head">
-          <h3 className="list-title">📊 Sales Analysis — 12 months (Target vs Achieved)</h3>
+          <h3 className="list-title">📊 Yearly Plan — 12 months (Target vs Achieved)</h3>
           <button className="btn small" onClick={() => onNavigate('monthly')}>Edit</button>
         </div>
         <BarChart data={salesYearData} format={rupee} scrollable />

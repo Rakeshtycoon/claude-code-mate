@@ -834,6 +834,14 @@ li.done .checklist-text {
   color: var(--muted);
 }
 
+/* Auto-filled (read-only) value inside a table cell. */
+.cell-ro {
+  display: inline-block;
+  padding: 6px 2px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 /* ---------- Read-only Last Year rows ---------- */
 .readonly-row {
   display: flex;

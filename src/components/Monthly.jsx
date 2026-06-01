@@ -216,6 +216,9 @@ function PlanTab() {
 
 function SalesTab() {
   const [rows, setRows] = useLocalStorage('bd.salesAnalysis', {})
+  // Last Year column is auto-filled from the shared actuals store (the same
+  // figures edited in the Monthly Plan "Last Year" section).
+  const [actuals] = useLocalStorage('bd.monthlyActuals', {})
   const [year, setYear] = useState(new Date().getFullYear())
 
   // April (year) → March (year+1), matching the diary's financial-year layout.
@@ -227,14 +230,14 @@ function SalesTab() {
   }
 
   function setCell(key, field, value) {
-    const row = rows[key] || { lastYear: '', target: '', achieved: '', remark: '' }
+    const row = rows[key] || { target: '', achieved: '', remark: '' }
     setRows({ ...rows, [key]: { ...row, [field]: value } })
   }
 
   return (
     <div>
       <div className="list-head">
-        <h2>Sales Data Analysis — April {year} to March {year + 1}</h2>
+        <h2>Yearly Plan — April {year} to March {year + 1}</h2>
         <input
           type="number"
           className="search"
@@ -259,10 +262,11 @@ function SalesTab() {
             {months.map(({ key, m, y }) => {
               const row = rows[key] || {}
               const p = pct(row.achieved, row.target)
+              const lastYearSales = actuals[lastYearMonth(key)]?.sales
               return (
                 <tr key={key}>
                   <td>{new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</td>
-                  <td><span className="rupee"><input type="number" value={row.lastYear || ''} onChange={(e) => setCell(key, 'lastYear', e.target.value)} /></span></td>
+                  <td className="right"><span className="cell-ro">{lastYearSales ? formatMoney(lastYearSales) : '—'}</span></td>
                   <td><span className="rupee"><input type="number" value={row.target || ''} onChange={(e) => setCell(key, 'target', e.target.value)} /></span></td>
                   <td><span className="rupee"><input type="number" value={row.achieved || ''} onChange={(e) => setCell(key, 'achieved', e.target.value)} /></span></td>
                   <td className="right">{p === null ? '—' : `${p}%`}</td>
@@ -273,6 +277,10 @@ function SalesTab() {
           </tbody>
         </table>
       </div>
+      <p className="small-note">
+        Last Year is auto-filled from the same month a year ago. Edit those figures in
+        Monthly Plan → Last Year.
+      </p>
     </div>
   )
 }
@@ -291,7 +299,7 @@ export default function Monthly() {
             Monthly Plan
           </button>
           <button className={tab === 'sales' ? 'active' : ''} onClick={() => setTab('sales')}>
-            Sales Analysis
+            Yearly Plan
           </button>
         </div>
       </header>
