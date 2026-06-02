@@ -3,23 +3,11 @@ import { useSettings } from '../hooks/useSettings.js'
 import { todayISO, formatDate, formatMoney, uid } from '../lib/format.js'
 import { monthAchieved } from '../lib/totals.js'
 import { useMemo, useState } from 'react'
-import EditableList from './EditableList.jsx'
 import TodoList from './TodoList.jsx'
 
-// Every list on the daily page is a task list whose unfinished items can be
-// carried forward to the next day.
-const TASK_KEYS = [
-  'todo',
-  'yearlyGoal',
-  'visits',
-  'followups',
-  'quotations',
-  'operations',
-  'business',
-  'teamFollow',
-  'otherFollow',
-  'familyOther',
-]
+// The To-Do list is the carry-forward source: unfinished items can be moved
+// to the next day.
+const TASK_KEYS = ['todo']
 
 /** Collect not-done items from a day, grouped by list, with a total count. */
 function pendingOf(day) {
@@ -47,18 +35,6 @@ function findCarrySource(days, date) {
   }
   return null
 }
-
-const LISTS = [
-  { key: 'yearlyGoal', title: 'Action to Achieve My Yearly Goal' },
-  { key: 'visits', title: 'Visit / One to One / Zoom Call' },
-  { key: 'followups', title: 'Follow up & Reminder via Calls / Msg.' },
-  { key: 'quotations', title: 'Quotation / Inquiry / Pending to Close' },
-  { key: 'operations', title: 'Operation and Other Task' },
-  { key: 'business', title: 'Business' },
-  { key: 'teamFollow', title: 'Team Follow / Customer Follow' },
-  { key: 'otherFollow', title: 'Other Follow' },
-  { key: 'familyOther', title: 'Family / Other' },
-]
 
 function emptyDay() {
   return {
@@ -271,18 +247,6 @@ export default function Daily() {
             onChange={(today) => updateDay({ ...day, today })}
           />
         </div>
-      </div>
-
-      <div className="grid-2">
-        {LISTS.map((l) => (
-          <EditableList
-            key={l.key}
-            title={l.title}
-            items={day.lists[l.key] || []}
-            onChange={(items) => setList(l.key, items)}
-            placeholder="Add…"
-          />
-        ))}
       </div>
     </div>
   )
