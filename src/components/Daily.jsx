@@ -1,4 +1,5 @@
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
+import { useSettings } from '../hooks/useSettings.js'
 import { todayISO, formatDate, formatMoney, uid } from '../lib/format.js'
 import { monthAchieved } from '../lib/totals.js'
 import { useMemo, useState } from 'react'
@@ -46,17 +47,6 @@ function findCarrySource(days, date) {
   }
   return null
 }
-
-const MANTRAS = [
-  'Prayer / Gratitude',
-  'Yoga / Walk / Exercise',
-  'Affirmation',
-  'Learn / Read',
-  'Sharing',
-  'Sales Report PA App',
-  'Task Sheet Post in Group',
-  'Growth Action',
-]
 
 const LISTS = [
   { key: 'yearlyGoal', title: 'Action to Achieve My Yearly Goal' },
@@ -129,6 +119,8 @@ function TargetTable({ label, data, onChange, readOnly = false, hint }) {
 export default function Daily() {
   const [days, setDays] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
+  const [settings] = useSettings()
+  const MANTRAS = settings.mantras
   const [date, setDate] = useState(todayISO())
   const [notifyState, setNotifyState] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'

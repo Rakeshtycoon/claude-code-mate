@@ -1,9 +1,19 @@
 import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
+import { useSettings } from '../hooks/useSettings.js'
 import { todayISO, formatMoney } from '../lib/format.js'
+import { monthAchieved } from '../lib/totals.js'
 import { QuoteRotator, Slideshow } from './Inspiration.jsx'
 
 const GOAL_CATS = ['business', 'finance', 'family', 'health', 'pa', 'crazy']
+
+function lastYearMonth(ym) {
+  const [y, m] = ym.split('-')
+  return `${Number(y) - 1}-${m}`
+}
+
+const num = (v) => Number(v) || 0
+const pct = (a, t) => (num(t) ? Math.round((num(a) / num(t)) * 100) : null)
 
 export default function Dashboard({ onNavigate }) {
   const [slideshow, setSlideshow] = useState(false)
@@ -11,11 +21,26 @@ export default function Dashboard({ onNavigate }) {
   const [goals] = useLocalStorage('bd.goals', {})
   const [days] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
+  const [actuals] = useLocalStorage('bd.monthlyActuals', {})
+  const [settings] = useSettings()
 
   const date = todayISO()
   const day = days[date]
   const month = date.slice(0, 7)
   const plan = plans[month]
+
+  // This-month performance, rolled up from the Daily page.
+  const ach = monthAchieved(days, month)
+  const salesTarget = plan?.target?.sales
+  const collTarget = plan?.target?.collection
+  const salesPct = pct(ach.sales, salesTarget)
+  const collPct = pct(ach.collection, collTarget)
+  const lastYearSales = actuals[lastYearMonth(month)]?.sales
+  const growth =
+    num(lastYearSales) && num(ach.sales)
+      ? Math.round(((num(ach.sales) - num(lastYearSales)) / num(lastYearSales)) * 100)
+      : null
+  const monthName = new Date().toLocaleDateString(undefined, { month: 'long' })
 
   // Goal status counts.
   let total = 0
@@ -75,10 +100,52 @@ export default function Dashboard({ onNavigate }) {
       <QuoteRotator onOpen={() => setSlideshow(true)} />
       {slideshow && <Slideshow onClose={() => setSlideshow(false)} />}
 
+      <button className="card month-progress clickable" onClick={() => onNavigate('monthly')}>
+        <div className="mp-head">
+          <h3 className="list-title">This month — {monthName}</h3>
+          <div className="mp-pills">
+            {growth !== null && (
+              <span className={growth >= 0 ? 'growth-up' : 'growth-down'}>
+                {growth >= 0 ? '▲' : '▼'} {Math.abs(growth)}% vs last year
+              </span>
+            )}
+            <span className="mp-pending">⏳ {taskCount - tasksDone} pending today</span>
+          </div>
+        </div>
+
+        <div className="mp-row">
+          <span className="mp-label">Sales</span>
+          <span className="mp-track">
+            <span
+              className="mp-fill sales"
+              style={{ width: `${Math.min(salesPct || 0, 100)}%` }}
+            />
+          </span>
+          <span className="mp-figure">
+            {formatMoney(ach.sales)} / {salesTarget ? formatMoney(salesTarget) : '—'}
+            {salesPct !== null && <strong> · {salesPct}%</strong>}
+          </span>
+        </div>
+
+        <div className="mp-row">
+          <span className="mp-label">Collection</span>
+          <span className="mp-track">
+            <span
+              className="mp-fill coll"
+              style={{ width: `${Math.min(collPct || 0, 100)}%` }}
+            />
+          </span>
+          <span className="mp-figure">
+            {formatMoney(ach.collection)} / {collTarget ? formatMoney(collTarget) : '—'}
+            {collPct !== null && <strong> · {collPct}%</strong>}
+          </span>
+        </div>
+      </button>
+
       <div className="stat-grid">
         <button className="card stat clickable" onClick={() => onNavigate('daily')}>
           <span className="stat-label">Morning Mantras today</span>
-          <span className="stat-value">{mantrasDone}/8</span>
+          <span className="stat-value">{mantrasDone}/{settings.mantras.length}</span>
         </button>
         <button className="card stat clickable" onClick={() => onNavigate('daily')}>
           <span className="stat-label">Today's tasks</span>

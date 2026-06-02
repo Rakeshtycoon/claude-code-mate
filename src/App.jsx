@@ -8,9 +8,12 @@ import Planner from './components/Planner.jsx'
 import Lists from './components/Lists.jsx'
 import Graphs from './components/Graphs.jsx'
 import Backup from './components/Backup.jsx'
+import Settings from './components/Settings.jsx'
 import { runDailyAutoBackup } from './lib/autobackup.js'
 import { useReminders } from './hooks/useReminders.js'
 import { useLocalStorage } from './hooks/useLocalStorage.js'
+import { useSettings } from './hooks/useSettings.js'
+import { accentColor } from './lib/settings.js'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -22,6 +25,7 @@ const NAV = [
   { id: 'graphs', label: 'Graphs', icon: '📉' },
   { id: 'profile', label: 'Profile', icon: '🧑‍💼' },
   { id: 'backup', label: 'Backup', icon: '💾' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
 ]
 
 const VIEWS = {
@@ -34,15 +38,22 @@ const VIEWS = {
   graphs: (nav) => <Graphs onNavigate={nav} />,
   profile: () => <Profile />,
   backup: () => <Backup />,
+  settings: () => <Settings />,
 }
 
 export default function App() {
   const [view, setView] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
   const [profile] = useLocalStorage('bd.profile', {})
+  const [settings] = useSettings()
 
   // Schedule reminders for timed To-Do tasks (while the app is open).
   useReminders()
+
+  // Apply the chosen accent colour to the whole app.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--pa-blue', accentColor(settings.accent))
+  }, [settings.accent])
 
   // Once per day, the first time the app opens, take an automatic backup.
   useEffect(() => {

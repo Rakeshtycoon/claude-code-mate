@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   downloadBackup,
+  shareBackup,
   parseBackup,
   restoreBackup,
   summarize,
@@ -116,6 +117,20 @@ export default function Backup() {
       })
     } catch {
       setMessage({ type: 'err', text: 'Could not create the backup file.' })
+    }
+  }
+
+  async function handleShare() {
+    try {
+      const { shared } = await shareBackup()
+      setMessage({
+        type: 'ok',
+        text: shared
+          ? 'Share sheet opened — send it to WhatsApp, Email or Drive.'
+          : 'Sharing isn’t available here, so the backup was downloaded instead.',
+      })
+    } catch {
+      setMessage({ type: 'err', text: 'Could not share the backup.' })
     }
   }
 
@@ -264,9 +279,18 @@ export default function Backup() {
             <li><strong>{liveSummary.goals}</strong> goal(s)</li>
             <li><strong>{liveSummary.monthlyPlans}</strong> monthly plan(s)</li>
           </ul>
-          <button className="btn" onClick={handleExport}>
-            Download backup file
-          </button>
+          <div className="link-row">
+            <button className="btn primary" onClick={handleShare}>
+              📤 Share backup
+            </button>
+            <button className="btn" onClick={handleExport}>
+              Download
+            </button>
+          </div>
+          <p className="muted small-note">
+            “Share” opens WhatsApp / Email / Drive on your phone so you can send the
+            backup to yourself.
+          </p>
         </section>
 
         <section className="card backup-card">

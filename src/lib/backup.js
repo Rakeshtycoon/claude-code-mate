@@ -52,6 +52,36 @@ export function downloadBackup() {
   return backup
 }
 
+/**
+ * Share the backup as a file via the device's share sheet (WhatsApp, Email,
+ * Drive, …). Falls back to a normal download where sharing files isn't
+ * supported. Returns { shared: boolean }.
+ */
+export async function shareBackup() {
+  const backup = buildBackup()
+  const text = JSON.stringify(backup, null, 2)
+  const stamp = new Date().toISOString().slice(0, 10)
+  const fileName = `business-diary-backup-${stamp}.json`
+
+  try {
+    const file = new File([text], fileName, { type: 'application/json' })
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: 'Business Diary backup',
+        text: 'My Business Diary backup',
+      })
+      return { shared: true }
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') return { shared: true } // user closed the sheet
+    // otherwise fall through to download
+  }
+
+  downloadBackup()
+  return { shared: false }
+}
+
 /** Parse and validate backup text. Throws a friendly error if invalid. */
 export function parseBackup(text) {
   let parsed

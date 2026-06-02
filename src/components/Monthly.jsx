@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
+import { useSettings } from '../hooks/useSettings.js'
 import { formatMoney } from '../lib/format.js'
 import { monthAchieved } from '../lib/totals.js'
 import EditableList from './EditableList.jsx'
@@ -234,15 +235,19 @@ function SalesTab() {
   const [actuals] = useLocalStorage('bd.monthlyActuals', {})
   // Achieved is rolled up from the Daily page, same as Monthly Plan → Achieved.
   const [days] = useLocalStorage('bd.days', {})
+  const [settings] = useSettings()
   const [year, setYear] = useState(new Date().getFullYear())
 
-  // April (year) → March (year+1), matching the diary's financial-year layout.
+  // 12 months from the configured financial-year start (default April → March).
+  const start = settings.fyStartMonth - 1 // 0-indexed
   const months = []
   for (let i = 0; i < 12; i++) {
-    const m = (3 + i) % 12
-    const y = 3 + i < 12 ? year : year + 1
+    const m = (start + i) % 12
+    const y = start + i < 12 ? year : year + 1
     months.push({ key: `${y}-${String(m + 1).padStart(2, '0')}`, m, y })
   }
+  const fyStart = months[0]
+  const fyEnd = months[11]
 
   function setCell(key, field, value) {
     const row = rows[key] || { remark: '' }
@@ -258,7 +263,12 @@ function SalesTab() {
   return (
     <div>
       <div className="list-head">
-        <h2>Yearly Plan — April {year} to March {year + 1}</h2>
+        <h2>
+          Yearly Plan —{' '}
+          {new Date(fyStart.y, fyStart.m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+          {' '}to{' '}
+          {new Date(fyEnd.y, fyEnd.m, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+        </h2>
         <input
           type="number"
           className="search"

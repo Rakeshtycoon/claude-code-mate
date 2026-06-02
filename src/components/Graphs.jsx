@@ -1,5 +1,7 @@
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
+import { useSettings } from '../hooks/useSettings.js'
 import { compactNumber } from '../lib/format.js'
+import { monthAchieved } from '../lib/totals.js'
 import BarChart from './charts/BarChart.jsx'
 import DonutChart from './charts/DonutChart.jsx'
 
@@ -36,7 +38,7 @@ export default function Graphs({ onNavigate }) {
   const [days] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
   const [actuals] = useLocalStorage('bd.monthlyActuals', {})
-  const [salesAnalysis] = useLocalStorage('bd.salesAnalysis', {})
+  const [settings] = useSettings()
 
   const month = new Date().toISOString().slice(0, 7)
   const plan = plans[month]
@@ -79,18 +81,19 @@ export default function Graphs({ onNavigate }) {
     },
   ]
 
-  // Sales Analysis: 12 months (financial year Apr→Mar).
+  // Yearly Plan: 12 months from the configured financial-year start.
   const fyYear = new Date().getFullYear()
+  const fyStart = settings.fyStartMonth - 1
   const salesYearData = []
   for (let i = 0; i < 12; i++) {
-    const m = (3 + i) % 12
-    const y = 3 + i < 12 ? fyYear : fyYear + 1
-    const row = salesAnalysis[`${y}-${String(m + 1).padStart(2, '0')}`] || {}
+    const m = (fyStart + i) % 12
+    const y = fyStart + i < 12 ? fyYear : fyYear + 1
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`
     salesYearData.push({
       label: new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short' }),
       bars: [
-        { name: 'Target', value: num(row.target), color: '#93c5fd' },
-        { name: 'Achieved', value: num(row.achieved), color: '#16a34a' },
+        { name: 'Target', value: num(plans[key]?.target?.sales), color: '#93c5fd' },
+        { name: 'Achieved', value: monthAchieved(days, key).sales, color: '#16a34a' },
       ],
     })
   }
