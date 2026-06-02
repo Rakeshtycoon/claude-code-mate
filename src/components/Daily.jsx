@@ -136,7 +136,12 @@ export default function Daily() {
     if (!carrySource) return
     const nextLists = { ...day.lists }
     for (const [key, items] of Object.entries(carrySource.lists)) {
-      const copies = items.map((it) => ({ id: uid(), text: it.text, done: false }))
+      const copies = items.map((it) => ({
+        id: uid(),
+        text: it.text,
+        done: false,
+        category: it.category,
+      }))
       nextLists[key] = [...(nextLists[key] || []), ...copies]
     }
     updateDay({ ...day, lists: nextLists, carryAsked: true })
