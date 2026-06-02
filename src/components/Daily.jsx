@@ -98,15 +98,6 @@ export default function Daily() {
   const [settings] = useSettings()
   const MANTRAS = settings.mantras
   const [date, setDate] = useState(todayISO())
-  const [notifyState, setNotifyState] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
-  )
-
-  function enableNotify() {
-    if (typeof Notification !== 'undefined') {
-      Notification.requestPermission().then((p) => setNotifyState(p))
-    }
-  }
 
   const day = days[date] || emptyDay()
 
@@ -205,8 +196,6 @@ export default function Daily() {
         <TodoList
           items={day.lists.todo || []}
           onChange={(items) => setList('todo', items)}
-          notifyState={notifyState}
-          onEnableNotify={enableNotify}
         />
       </div>
 
