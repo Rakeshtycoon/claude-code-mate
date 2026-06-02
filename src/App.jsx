@@ -13,7 +13,7 @@ import { runDailyAutoBackup } from './lib/autobackup.js'
 import { useReminders } from './hooks/useReminders.js'
 import { useLocalStorage } from './hooks/useLocalStorage.js'
 import { useSettings } from './hooks/useSettings.js'
-import { accentColor } from './lib/settings.js'
+import { accentColor, isLightColor, readableAccent } from './lib/settings.js'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -50,9 +50,19 @@ export default function App() {
   // Schedule reminders for timed To-Do tasks (while the app is open).
   useReminders()
 
-  // Apply the chosen accent colour to the whole app.
+  // Apply the chosen accent colour. The sidebar shows the true colour (with
+  // auto dark/light text), while headings use a readable, darker-if-light shade.
   useEffect(() => {
-    document.documentElement.style.setProperty('--pa-blue', accentColor(settings.accent))
+    const raw = accentColor(settings.accent)
+    const light = isLightColor(raw)
+    const root = document.documentElement.style
+    root.setProperty('--pa-blue', readableAccent(raw))
+    root.setProperty('--sidebar-bg', raw)
+    root.setProperty('--side-text', light ? 'rgba(15,23,42,0.88)' : '#e2e8f0')
+    root.setProperty('--side-strong', light ? '#0f172a' : '#ffffff')
+    root.setProperty('--side-muted', light ? 'rgba(15,23,42,0.62)' : '#c7d2fe')
+    root.setProperty('--side-hover', light ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)')
+    root.setProperty('--side-active-text', light ? '#0f172a' : readableAccent(raw))
   }, [settings.accent])
 
   // Once per day, the first time the app opens, take an automatic backup.
