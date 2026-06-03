@@ -131,6 +131,7 @@ export default function Graphs({ onNavigate }) {
         </div>
       </header>
 
+      <div className="graphs-grid">
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">
@@ -197,6 +198,7 @@ export default function Graphs({ onNavigate }) {
         </div>
         <BarChart data={collection7} format={rupee} />
       </section>
+      </div>
     </div>
   )
 }
