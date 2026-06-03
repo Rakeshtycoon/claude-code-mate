@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { useSettings } from '../hooks/useSettings.js'
-import { todayISO, formatMoney } from '../lib/format.js'
+import { todayISO, formatMoney, compactNumber } from '../lib/format.js'
 import { monthAchieved } from '../lib/totals.js'
 import { QuoteRotator, Slideshow } from './Inspiration.jsx'
+import ProgressRing from './charts/ProgressRing.jsx'
+import Sparkline from './charts/Sparkline.jsx'
 
 const GOAL_CATS = ['business', 'finance', 'family', 'health', 'pa', 'crazy']
 
@@ -41,6 +43,16 @@ export default function Dashboard({ onNavigate }) {
       ? Math.round(((num(ach.sales) - num(lastYearSales)) / num(lastYearSales)) * 100)
       : null
   const monthName = new Date().toLocaleDateString(undefined, { month: 'long' })
+
+  // Last 7 days of achieved sales for the trend sparkline.
+  const sales7 = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const iso = d.toISOString().slice(0, 10)
+    sales7.push({ label: String(d.getDate()), value: num(days[iso]?.today?.salesAchieved) })
+  }
+  const sales7Total = sales7.reduce((n, p) => n + p.value, 0)
 
   // Goal status counts.
   let total = 0
@@ -113,33 +125,30 @@ export default function Dashboard({ onNavigate }) {
           </div>
         </div>
 
-        <div className="mp-row">
-          <span className="mp-label">Sales</span>
-          <span className="mp-track">
-            <span
-              className="mp-fill sales"
-              style={{ width: `${Math.min(salesPct || 0, 100)}%` }}
-            />
-          </span>
-          <span className="mp-figure">
-            {formatMoney(ach.sales)} / {salesTarget ? formatMoney(salesTarget) : '—'}
-            {salesPct !== null && <strong> · {salesPct}%</strong>}
-          </span>
+        <div className="month-rings">
+          <div className="ring-block">
+            <ProgressRing pct={salesPct} color="var(--pa-orange)" />
+            <span className="ring-cap">Sales</span>
+            <span className="ring-fig">
+              {formatMoney(ach.sales)} / {salesTarget ? formatMoney(salesTarget) : '—'}
+            </span>
+          </div>
+          <div className="ring-block">
+            <ProgressRing pct={collPct} color="var(--green)" />
+            <span className="ring-cap">Collection</span>
+            <span className="ring-fig">
+              {formatMoney(ach.collection)} / {collTarget ? formatMoney(collTarget) : '—'}
+            </span>
+          </div>
         </div>
+      </button>
 
-        <div className="mp-row">
-          <span className="mp-label">Collection</span>
-          <span className="mp-track">
-            <span
-              className="mp-fill coll"
-              style={{ width: `${Math.min(collPct || 0, 100)}%` }}
-            />
-          </span>
-          <span className="mp-figure">
-            {formatMoney(ach.collection)} / {collTarget ? formatMoney(collTarget) : '—'}
-            {collPct !== null && <strong> · {collPct}%</strong>}
-          </span>
+      <button className="card trend-card clickable" onClick={() => onNavigate('graphs')}>
+        <div className="mp-head">
+          <h3 className="list-title">Last 7 days — Sales</h3>
+          <span className="trend-total">₹{compactNumber(sales7Total)} total</span>
         </div>
+        <Sparkline points={sales7} color="var(--pa-orange)" />
       </button>
 
       <div className="stat-grid">
