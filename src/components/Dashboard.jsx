@@ -5,7 +5,9 @@ import { todayISO, formatMoney, compactNumber } from '../lib/format.js'
 import { monthAchieved } from '../lib/totals.js'
 import { QuoteRotator, Slideshow } from './Inspiration.jsx'
 import ProgressRing from './charts/ProgressRing.jsx'
-import Sparkline from './charts/Sparkline.jsx'
+import BarChart from './charts/BarChart.jsx'
+
+const rupee = (v) => `₹${compactNumber(v)}`
 
 const GOAL_CATS = ['business', 'finance', 'family', 'health', 'pa', 'crazy']
 
@@ -44,13 +46,18 @@ export default function Dashboard({ onNavigate }) {
       : null
   const monthName = new Date().toLocaleDateString(undefined, { month: 'long' })
 
-  // Last 7 days of achieved sales for the trend sparkline.
+  // Last 7 days of achieved sales, as daily bars.
   const sales7 = []
   for (let i = 6; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     const iso = d.toISOString().slice(0, 10)
-    sales7.push({ label: String(d.getDate()), value: num(days[iso]?.today?.salesAchieved) })
+    const value = num(days[iso]?.today?.salesAchieved)
+    sales7.push({
+      label: String(d.getDate()),
+      bars: [{ name: 'Sales', value, color: '#ea580c' }],
+      value,
+    })
   }
   const sales7Total = sales7.reduce((n, p) => n + p.value, 0)
 
@@ -148,7 +155,7 @@ export default function Dashboard({ onNavigate }) {
           <h3 className="list-title">Last 7 days — Sales</h3>
           <span className="trend-total">₹{compactNumber(sales7Total)} total</span>
         </div>
-        <Sparkline points={sales7} color="var(--pa-orange)" />
+        <BarChart data={sales7} format={rupee} />
       </button>
 
       <div className="stat-grid">
