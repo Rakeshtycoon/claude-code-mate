@@ -3,6 +3,7 @@ import Dashboard from './components/Dashboard.jsx'
 import Profile from './components/Profile.jsx'
 import Goals from './components/Goals.jsx'
 import Daily from './components/Daily.jsx'
+import Expenses from './components/Expenses.jsx'
 import Monthly from './components/Monthly.jsx'
 import Planner from './components/Planner.jsx'
 import Lists from './components/Lists.jsx'
@@ -18,6 +19,7 @@ import { accentColor, isLightColor, readableAccent } from './lib/settings.js'
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'daily', label: 'Daily', icon: '📔' },
+  { id: 'expenses', label: 'Expenses', icon: '💰' },
   { id: 'goals', label: 'Goals', icon: '🎯' },
   { id: 'monthly', label: 'Monthly', icon: '📈' },
   { id: 'planner', label: 'Planner', icon: '🗓️' },
@@ -31,6 +33,7 @@ const NAV = [
 const VIEWS = {
   dashboard: (nav) => <Dashboard onNavigate={nav} />,
   daily: () => <Daily />,
+  expenses: () => <Expenses />,
   goals: () => <Goals />,
   monthly: () => <Monthly />,
   planner: () => <Planner />,
