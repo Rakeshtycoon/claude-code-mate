@@ -167,23 +167,6 @@ export default function Dashboard({ onNavigate }) {
         </button>
       </div>
 
-      <div className="card quick-links">
-        <h3 className="list-title">Jump back in</h3>
-        <div className="link-row">
-          <button className="btn" onClick={() => onNavigate('daily')}>
-            📔 Today's page
-          </button>
-          <button className="btn" onClick={() => onNavigate('goals')}>
-            🎯 Review goals
-          </button>
-          <button className="btn" onClick={() => onNavigate('monthly')}>
-            📈 Monthly plan
-          </button>
-          <button className="btn" onClick={() => onNavigate('graphs')}>
-            📊 Graphs
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
