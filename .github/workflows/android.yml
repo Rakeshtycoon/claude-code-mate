@@ -39,7 +39,9 @@ jobs:
 
       - name: Add Capacitor Android project
         run: |
-          npm install --no-save @capacitor/core@^6 @capacitor/cli@^6 @capacitor/android@^6
+          npm install --no-save \
+            @capacitor/core@^6 @capacitor/cli@^6 @capacitor/android@^6 \
+            @capacitor/filesystem@^6 @capacitor/share@^6
           npx cap add android
           npx cap sync android
 

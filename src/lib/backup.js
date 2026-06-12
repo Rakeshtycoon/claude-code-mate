@@ -53,9 +53,18 @@ export function downloadBackup() {
 }
 
 /**
+ * True when running inside the Android/iOS app (Capacitor), where browser
+ * file download and the File System Access API are not available.
+ */
+export function isNativeApp() {
+  return typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.()
+}
+
+/**
  * Share the backup as a file via the device's share sheet (WhatsApp, Email,
- * Drive, …). Falls back to a normal download where sharing files isn't
- * supported. Returns { shared: boolean }.
+ * Drive, Files…). In the native app this uses Capacitor's Filesystem + Share;
+ * in a browser it uses the Web Share API, falling back to a download.
+ * Returns { shared: boolean }.
  */
 export async function shareBackup() {
   const backup = buildBackup()
@@ -63,6 +72,29 @@ export async function shareBackup() {
   const stamp = new Date().toISOString().slice(0, 10)
   const fileName = `business-diary-backup-${stamp}.json`
 
+  // Native app: write to a cache file, then open the OS share sheet.
+  if (isNativeApp()) {
+    const FS = window.Capacitor.Plugins.Filesystem
+    const ShareP = window.Capacitor.Plugins.Share
+    const { uri } = await FS.writeFile({
+      path: fileName,
+      data: text,
+      directory: 'CACHE',
+      encoding: 'utf8',
+    })
+    try {
+      await ShareP.share({
+        title: 'Business Diary backup',
+        text: 'My Business Diary backup',
+        files: [uri],
+      })
+    } catch {
+      // User dismissed the share sheet — that's fine.
+    }
+    return { shared: true }
+  }
+
+  // Browser: Web Share API with a file, else download.
   try {
     const file = new File([text], fileName, { type: 'application/json' })
     if (navigator.canShare && navigator.canShare({ files: [file] })) {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   downloadBackup,
   shareBackup,
+  isNativeApp,
   parseBackup,
   restoreBackup,
   summarize,
@@ -163,6 +164,7 @@ export default function Backup() {
   }
 
   const pendingSummary = pending ? summarize(pending.data) : null
+  const native = isNativeApp()
 
   return (
     <div>
@@ -230,7 +232,13 @@ export default function Backup() {
       {/* ---- Auto-save to a file (Chrome / Android / desktop) ---- */}
       <section className="card">
         <div className="section-bar">📁 Auto-save to a file</div>
-        {!fileStatus.supported ? (
+        {native ? (
+          <p className="muted backup-desc">
+            In the app, use <strong>Share backup</strong> below to save a copy to Google
+            Drive, Files or WhatsApp. Restore it later with “Choose backup file”.
+            Daily restore points above also protect your data automatically.
+          </p>
+        ) : !fileStatus.supported ? (
           <p className="muted backup-desc">
             This browser can't auto-save to a file. On iPhone/Safari, use the
             daily restore points above plus the manual backup below (save the
@@ -273,7 +281,7 @@ export default function Backup() {
       {/* ---- Manual export / import ---- */}
       <div className="grid-2">
         <section className="card backup-card">
-          <h3 className="list-title">⬇️ Download a copy</h3>
+          <h3 className="list-title">📤 Save / Share a copy</h3>
           <ul className="backup-stats">
             <li><strong>{liveSummary.days}</strong> daily page(s)</li>
             <li><strong>{liveSummary.goals}</strong> goal(s)</li>
@@ -283,13 +291,15 @@ export default function Backup() {
             <button className="btn primary" onClick={handleShare}>
               📤 Share backup
             </button>
-            <button className="btn" onClick={handleExport}>
-              Download
-            </button>
+            {!native && (
+              <button className="btn" onClick={handleExport}>
+                Download
+              </button>
+            )}
           </div>
           <p className="muted small-note">
-            “Share” opens WhatsApp / Email / Drive on your phone so you can send the
-            backup to yourself.
+            “Share” opens WhatsApp / Email / Drive / Files so you can save the backup to
+            yourself, then restore it on the right.
           </p>
         </section>
 
