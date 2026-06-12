@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import devPhoto from '../lib/devPhoto.js'
 
 const NAME = 'Rakesh Makani'
 
@@ -12,19 +12,7 @@ to themselves, then every hour I spent on it was worth it.
 
 Thank you for using it. — Rakesh`
 
-// Tries a transparent PNG first, then a JPG, then falls back to initials.
-const base = import.meta.env.BASE_URL
-const SOURCES = [`${base}developer.png`, `${base}developer.jpg`]
-
 export default function DeveloperMessage({ onClose }) {
-  const [idx, setIdx] = useState(0)
-  const [failed, setFailed] = useState(false)
-
-  function onImgError() {
-    if (idx + 1 < SOURCES.length) setIdx(idx + 1)
-    else setFailed(true)
-  }
-
   return (
     <div className="dev-overlay" onClick={onClose}>
       <div className="dev-modal" onClick={(e) => e.stopPropagation()}>
@@ -33,11 +21,7 @@ export default function DeveloperMessage({ onClose }) {
         </button>
 
         <div className="dev-photo">
-          {!failed ? (
-            <img src={SOURCES[idx]} alt={NAME} onError={onImgError} />
-          ) : (
-            <span>{NAME.split(' ').map((w) => w[0]).join('').slice(0, 2)}</span>
-          )}
+          <img src={devPhoto} alt={NAME} />
         </div>
 
         <h3 className="dev-name">{NAME}</h3>
