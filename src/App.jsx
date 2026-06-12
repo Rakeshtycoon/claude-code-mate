@@ -50,6 +50,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [devOpen, setDevOpen] = useState(false)
   const [profile] = useLocalStorage('bd.profile', {})
+  const [quotes] = useLocalStorage('bd.quotes', [])
+  const [bucket] = useLocalStorage('bd.bucket', [])
   const [settings] = useSettings()
 
   // Schedule reminders for timed To-Do tasks (while the app is open).
@@ -74,6 +76,26 @@ export default function App() {
   useEffect(() => {
     runDailyAutoBackup()
   }, [])
+
+  // Feed the Android home-screen widget: empowering quotes + bucket-list
+  // lines and the on/off flag, via Capacitor Preferences (SharedPreferences).
+  useEffect(() => {
+    const Cap = typeof window !== 'undefined' ? window.Capacitor : undefined
+    if (!Cap?.isNativePlatform?.()) return
+    const P = Cap.Plugins?.Preferences
+    if (!P) return
+    const lines = []
+    for (const q of quotes || []) {
+      const t = (q.text || '').trim()
+      if (t) lines.push(t)
+    }
+    for (const b of bucket || []) {
+      const t = (b.text || '').trim()
+      if (t) lines.push(t)
+    }
+    P.set({ key: 'widgetLines', value: JSON.stringify(lines) })
+    P.set({ key: 'widgetEnabled', value: settings.widget ? 'true' : 'false' })
+  }, [quotes, bucket, settings.widget])
 
   function go(id) {
     setView(id)
