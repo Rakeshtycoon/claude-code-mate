@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import devPhoto from '../lib/devPhoto.js'
 
 const NAME = 'Rakesh Makani'
 
@@ -12,11 +12,7 @@ to themselves, then every hour I spent on it was worth it.
 
 Thank you for using it. — Rakesh`
 
-const PHOTO = `${import.meta.env.BASE_URL}developer.png`
-
 export default function DeveloperMessage({ onClose }) {
-  const [failed, setFailed] = useState(false)
-
   return (
     <div className="dev-overlay" onClick={onClose}>
       <div className="dev-modal" onClick={(e) => e.stopPropagation()}>
@@ -25,11 +21,7 @@ export default function DeveloperMessage({ onClose }) {
         </button>
 
         <div className="dev-photo">
-          {!failed ? (
-            <img src={PHOTO} alt={NAME} onError={() => setFailed(true)} />
-          ) : (
-            <span>{NAME.split(' ').map((w) => w[0]).join('').slice(0, 2)}</span>
-          )}
+          <img src={devPhoto} alt={NAME} />
         </div>
 
         <h3 className="dev-name">{NAME}</h3>
