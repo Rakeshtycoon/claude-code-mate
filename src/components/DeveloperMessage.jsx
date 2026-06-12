@@ -27,6 +27,7 @@ export default function DeveloperMessage({ onClose }) {
         <h3 className="dev-name">{NAME}</h3>
         <div className="dev-role">Developer</div>
         <p className="dev-msg">{MESSAGE}</p>
+        <div className="dev-version">Business Diary · v1.0.1 ✓</div>
       </div>
     </div>
   )

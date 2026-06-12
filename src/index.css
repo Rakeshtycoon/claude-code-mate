@@ -235,6 +235,13 @@ nav {
   white-space: pre-line;
 }
 
+.dev-version {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .main-col {
   flex: 1;
   min-width: 0;
