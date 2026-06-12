@@ -10,6 +10,7 @@ import Lists from './components/Lists.jsx'
 import Graphs from './components/Graphs.jsx'
 import Backup from './components/Backup.jsx'
 import Settings from './components/Settings.jsx'
+import DeveloperMessage from './components/DeveloperMessage.jsx'
 import { runDailyAutoBackup } from './lib/autobackup.js'
 import { useReminders } from './hooks/useReminders.js'
 import { useLocalStorage } from './hooks/useLocalStorage.js'
@@ -47,6 +48,7 @@ const VIEWS = {
 export default function App() {
   const [view, setView] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [devOpen, setDevOpen] = useState(false)
   const [profile] = useLocalStorage('bd.profile', {})
   const [settings] = useSettings()
 
@@ -104,7 +106,9 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-foot">Saved locally in your browser.</div>
+        <button className="sidebar-foot dev-link" type="button" onClick={() => setDevOpen(true)}>
+          💬 Developer’s Message
+        </button>
       </aside>
 
       <div className="main-col">
@@ -118,6 +122,8 @@ export default function App() {
         </div>
         <main className="content">{VIEWS[view](go)}</main>
       </div>
+
+      {devOpen && <DeveloperMessage onClose={() => setDevOpen(false)} />}
     </div>
   )
 }
