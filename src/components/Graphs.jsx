@@ -125,6 +125,32 @@ export default function Graphs({ onNavigate }) {
     })
   }
 
+  // Yearly comparison: total achieved Sales & Collection per financial year,
+  // so the trend (growth / de-growth) is visible across years.
+  const fyStartM = settings.fyStartMonth
+  const fyStartYearOf = (iso) => {
+    const y = Number(iso.slice(0, 4))
+    const m = Number(iso.slice(5, 7))
+    return m >= fyStartM ? y : y - 1
+  }
+  const curFY = fyStartYearOf(new Date().toISOString().slice(0, 10))
+  const fyTotals = {}
+  for (const [iso, d] of Object.entries(days)) {
+    const fy = fyStartYearOf(iso)
+    if (!fyTotals[fy]) fyTotals[fy] = { sales: 0, collection: 0 }
+    fyTotals[fy].sales += num(d?.today?.salesAchieved)
+    fyTotals[fy].collection += num(d?.today?.collAchieved)
+  }
+  const fyLabel = (yr) =>
+    fyStartM === 1 ? String(yr) : `${yr}-${String((yr + 1) % 100).padStart(2, '0')}`
+  const yearlyData = [curFY - 2, curFY - 1, curFY].map((yr) => ({
+    label: fyLabel(yr),
+    bars: [
+      { name: 'Sales', value: fyTotals[yr]?.sales || 0, color: '#2563eb' },
+      { name: 'Collection', value: fyTotals[yr]?.collection || 0, color: '#16a34a' },
+    ],
+  }))
+
   return (
     <div>
       <header className="page-head">
@@ -135,6 +161,14 @@ export default function Graphs({ onNavigate }) {
       </header>
 
       <div className="graphs-grid">
+      <section className="card">
+        <div className="chart-head">
+          <h3 className="list-title">📊 Yearly comparison — Sales &amp; Collection (Achieved)</h3>
+        </div>
+        <BarChart data={yearlyData} format={rupee} />
+        <p className="small-note">Total achieved each year — are you growing year over year?</p>
+      </section>
+
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">
