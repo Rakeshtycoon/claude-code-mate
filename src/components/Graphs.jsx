@@ -137,7 +137,6 @@ export default function Graphs({ onNavigate }) {
           <h3 className="list-title">
             📈 Monthly comparison — {new Date().toLocaleDateString(undefined, { month: 'long' })}
           </h3>
-          <button className="btn small" onClick={() => onNavigate('monthly')}>Edit</button>
         </div>
         <BarChart data={monthlyData} format={rupee} />
       </section>
@@ -145,7 +144,6 @@ export default function Graphs({ onNavigate }) {
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">📊 Yearly Plan — 12 months (Target vs Achieved)</h3>
-          <button className="btn small" onClick={() => onNavigate('monthly')}>Edit</button>
         </div>
         <BarChart data={salesYearData} format={rupee} scrollable />
       </section>
@@ -153,7 +151,6 @@ export default function Graphs({ onNavigate }) {
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">🎯 Goals progress by category</h3>
-          <button className="btn small" onClick={() => onNavigate('goals')}>Edit</button>
         </div>
         {totalGoals === 0 ? (
           <p className="chart-empty">No goals yet — add some in the Goals tab.</p>
@@ -178,7 +175,6 @@ export default function Graphs({ onNavigate }) {
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">🍩 Goals by status</h3>
-          <button className="btn small" onClick={() => onNavigate('goals')}>Edit</button>
         </div>
         <DonutChart data={donutData} centerLabel="goals" />
       </section>
@@ -186,7 +182,6 @@ export default function Graphs({ onNavigate }) {
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">📅 Daily sales — Target vs Achieved (last 7 days)</h3>
-          <button className="btn small" onClick={() => onNavigate('daily')}>Edit</button>
         </div>
         <BarChart data={sales7} format={rupee} />
       </section>
@@ -194,7 +189,6 @@ export default function Graphs({ onNavigate }) {
       <section className="card">
         <div className="chart-head">
           <h3 className="list-title">💵 Daily collection — Target vs Achieved (last 7 days)</h3>
-          <button className="btn small" onClick={() => onNavigate('daily')}>Edit</button>
         </div>
         <BarChart data={collection7} format={rupee} />
       </section>
