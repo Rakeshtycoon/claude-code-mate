@@ -85,7 +85,7 @@ export default function App() {
           {profile.photo ? (
             <img className="brand-photo" src={profile.photo} alt="" />
           ) : (
-            <span className="brand-mark">PA</span>
+            <img className="brand-photo brand-logo" src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />
           )}
           <div>
             <div className="brand-name">{profile.name || 'Business Diary'}</div>

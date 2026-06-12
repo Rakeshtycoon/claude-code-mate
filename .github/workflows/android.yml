@@ -35,6 +35,12 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Generate the app launcher icon
+        run: |
+          npm install --no-save sharp @capacitor/assets
+          node scripts/app-icon.mjs
+          npx @capacitor/assets generate --android --assetPath assets --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#ffffff' || true
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:

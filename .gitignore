@@ -148,3 +148,6 @@ business-diary-test.html
 # Capacitor native project (generated in CI)
 android/
 ios/
+
+# Generated app-icon source (built in CI)
+assets/
