@@ -47,7 +47,7 @@ export default function Expenses() {
     <div>
       <header className="page-head daily-head">
         <div>
-          <h1>Daily Expenses</h1>
+          <h1>Personal Expense</h1>
           <p className="muted">{dateLabel}</p>
         </div>
         <div className="date-nav">

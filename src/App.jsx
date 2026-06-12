@@ -20,7 +20,7 @@ import { accentColor, isLightColor, readableAccent } from './lib/settings.js'
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'daily', label: 'Daily', icon: '📔' },
-  { id: 'expenses', label: 'Expenses', icon: '💰' },
+  { id: 'expenses', label: 'Personal Expense', icon: '💰' },
   { id: 'goals', label: 'Goals', icon: '🎯' },
   { id: 'monthly', label: 'Monthly', icon: '📈' },
   { id: 'planner', label: 'Planner', icon: '🗓️' },

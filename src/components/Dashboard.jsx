@@ -26,6 +26,7 @@ export default function Dashboard({ onNavigate }) {
   const [days] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
   const [actuals] = useLocalStorage('bd.monthlyActuals', {})
+  const [expenses] = useLocalStorage('bd.expenses', {})
   const [settings] = useSettings()
 
   const date = todayISO()
@@ -45,6 +46,13 @@ export default function Dashboard({ onNavigate }) {
       ? Math.round(((num(ach.sales) - num(lastYearSales)) / num(lastYearSales)) * 100)
       : null
   const monthName = new Date().toLocaleDateString(undefined, { month: 'long' })
+
+  // This month's total personal expense.
+  let monthExpense = 0
+  for (const [d, items] of Object.entries(expenses)) {
+    if (d.slice(0, 7) !== month) continue
+    for (const e of items || []) monthExpense += num(e.amount)
+  }
 
   // Last 7 days of achieved sales, as daily bars.
   const sales7 = []
@@ -180,6 +188,10 @@ export default function Dashboard({ onNavigate }) {
           <span className="stat-value">
             {plan?.target?.sales ? formatMoney(plan.target.sales) : '—'}
           </span>
+        </button>
+        <button className="card stat clickable" onClick={() => onNavigate('expenses')}>
+          <span className="stat-label">Month personal expense</span>
+          <span className="stat-value">{formatMoney(monthExpense)}</span>
         </button>
       </div>
 
