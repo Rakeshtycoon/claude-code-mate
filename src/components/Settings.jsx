@@ -68,6 +68,31 @@ export default function Settings() {
         <p className="small-note">Changes the sidebar and headings colour.</p>
       </section>
 
+      {/* Home-screen widget */}
+      <section className="card form">
+        <h3 className="list-title">Home-screen widget</h3>
+        <label className="switch-row">
+          <span>
+            Rotating Quotes &amp; “Before I die” widget
+            <span className="muted"> (Android app)</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.widget}
+            className={`switch ${settings.widget ? 'on' : ''}`}
+            onClick={() => patch({ widget: !settings.widget })}
+          >
+            <span className="switch-knob" />
+          </button>
+        </label>
+        <p className="small-note">
+          When <strong>on</strong>, the home-screen widget shows your empowering
+          quotes and bucket-list items (a new one each tap). Turn <strong>off</strong>
+          to stop the widget. Takes effect in the Android app.
+        </p>
+      </section>
+
       {/* Financial year */}
       <section className="card form">
         <h3 className="list-title">Financial year</h3>

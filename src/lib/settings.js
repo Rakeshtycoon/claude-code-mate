@@ -72,4 +72,5 @@ export const DEFAULT_SETTINGS = {
   mantras: DEFAULT_MANTRAS,
   fyStartMonth: 4, // 1–12; April = start of the financial year by default
   accent: 'blue',
+  widget: true, // home-screen widget (Android app)
 }
