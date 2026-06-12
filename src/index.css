@@ -1216,6 +1216,18 @@ li.done .checklist-text {
   white-space: nowrap;
 }
 
+/* Automatic Growth / Same / De Growth label in the Target card. */
+.comparison-auto {
+  font-size: 17px;
+  font-weight: 800;
+  padding: 4px 2px;
+}
+
+.comp-same {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 /* ---------- Read-only Last Year rows ---------- */
 .readonly-row {
   display: flex;

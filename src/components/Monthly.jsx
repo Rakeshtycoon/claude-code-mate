@@ -99,6 +99,17 @@ function PlanTab() {
     return ''
   }
 
+  // Automatic comparison: this year's Sales target vs last year's Sales.
+  const compTarget = Number(plan.target.sales) || 0
+  const compLast = Number(lastYearValue('sales')) || 0
+  let comparison = null
+  if (compTarget && compLast) {
+    const change = Math.round(((compTarget - compLast) / compLast) * 100)
+    if (compTarget > compLast) comparison = { label: 'Growth', cls: 'growth-up', icon: '▲', change }
+    else if (compTarget < compLast) comparison = { label: 'De Growth', cls: 'growth-down', icon: '▼', change }
+    else comparison = { label: 'Same', cls: 'comp-same', icon: '＝', change: 0 }
+  }
+
   function update(next) {
     setPlans({ ...plans, [month]: next })
   }
@@ -177,18 +188,17 @@ function PlanTab() {
             />
           ))}
           <label className="field" style={{ marginTop: 14 }}>
-            <span>Comparison</span>
-            <div className="toggle">
-              {['Growth', 'Same', 'De Growth'].map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className={plan.comparison === c ? 'active' : ''}
-                  onClick={() => update({ ...plan, comparison: c })}
-                >
-                  {c}
-                </button>
-              ))}
+            <span>Comparison <span className="head-note">— vs Last Year, automatic</span></span>
+            <div className="comparison-auto">
+              {comparison ? (
+                <span className={comparison.cls}>
+                  {comparison.icon} {comparison.label}
+                  {comparison.change !== 0 &&
+                    ` · ${comparison.change > 0 ? '+' : ''}${comparison.change}%`}
+                </span>
+              ) : (
+                <span className="muted">Set a Sales target &amp; last year to compare.</span>
+              )}
             </div>
           </label>
         </div>
