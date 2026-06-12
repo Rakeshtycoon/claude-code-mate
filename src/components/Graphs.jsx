@@ -42,7 +42,10 @@ export default function Graphs({ onNavigate }) {
 
   const month = new Date().toISOString().slice(0, 7)
   const plan = plans[month]
-  const lastYear = actuals[lastYearMonth(month)] || {}
+  const lyKey = lastYearMonth(month)
+  const lastYear = actuals[lyKey] || {}
+  // Auto-carry: last year's sales falls back to that month's daily achieved.
+  const lastYearSales = num(lastYear.sales) || monthAchieved(days, lyKey).sales
 
   // Goals progress per category + status counts.
   let totalGoals = 0
@@ -68,7 +71,7 @@ export default function Graphs({ onNavigate }) {
     {
       label: 'Sales',
       bars: [
-        { name: 'Last Year', value: num(lastYear.sales), color: '#94a3b8' },
+        { name: 'Last Year', value: lastYearSales, color: '#94a3b8' },
         { name: 'Target', value: num(plan?.target?.sales), color: '#fbbf24' },
       ],
     },

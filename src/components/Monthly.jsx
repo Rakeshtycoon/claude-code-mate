@@ -88,6 +88,16 @@ function PlanTab() {
   // "Last Year" is the same month one year ago — read from the shared store.
   const lastYearKey = lastYearMonth(month)
   const lastYearData = actuals[lastYearKey] || {}
+  // Auto-carry: when no figure was typed for last year, fall back to that
+  // month's actual achieved from the Daily roll-up (Sales & Collection).
+  const lyAchieved = monthAchieved(days, lastYearKey)
+  function lastYearValue(field) {
+    const manual = lastYearData[field]
+    if (manual !== undefined && manual !== '' && manual !== null) return manual
+    if (field === 'sales') return lyAchieved.sales || ''
+    if (field === 'collection') return lyAchieved.collection || ''
+    return ''
+  }
 
   function update(next) {
     setPlans({ ...plans, [month]: next })
@@ -143,7 +153,7 @@ function PlanTab() {
             : LAST_YEAR_METRICS.map(({ field, label }) => (
                 <div key={field} className="readonly-row">
                   <span>{label}</span>
-                  <strong>{lastYearData[field] ? formatMoney(lastYearData[field]) : '—'}</strong>
+                  <strong>{lastYearValue(field) ? formatMoney(lastYearValue(field)) : '—'}</strong>
                 </div>
               ))}
 
@@ -296,7 +306,9 @@ function SalesTab() {
               const targetSales = plans[key]?.target?.sales || ''
               const achievedSales = monthAchieved(days, key).sales
               const p = pct(achievedSales, targetSales)
-              const lastYearSales = actuals[lastYearMonth(key)]?.sales
+              // Auto-carry: typed last-year sales, else last year's actual achieved.
+              const lyKey = lastYearMonth(key)
+              const lastYearSales = actuals[lyKey]?.sales || monthAchieved(days, lyKey).sales || ''
               const g = growthPct(targetSales, lastYearSales)
               return (
                 <tr key={key}>
