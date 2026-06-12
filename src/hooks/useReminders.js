@@ -37,7 +37,7 @@ export function useReminders() {
           fired.current.add(key)
           if (Notification.permission === 'granted') {
             try {
-              new Notification('Business Diary — આજનું કામ', {
+              new Notification('Business Diary — To-Do', {
                 body: `🕐 ${formatTime12(t.time)}  —  ${t.text}`,
               })
             } catch {

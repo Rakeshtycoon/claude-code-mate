@@ -182,16 +182,15 @@ export default function Daily() {
       {carrySource && (
         <div className="carry-banner">
           <div className="carry-text">
-            <strong>{carrySource.count}</strong> કામ {formatDate(carrySource.date)} ના
-            બાકી છે. આજે carry forward કરવા?
-            <span className="muted"> ({carrySource.count} pending task(s))</span>
+            <strong>{carrySource.count}</strong> task(s) from {formatDate(carrySource.date)} are
+            still pending. Carry them forward to today?
           </div>
           <div className="carry-actions">
             <button className="btn primary" onClick={carryForward}>
-              હા, આજે લાવો
+              Yes, bring them
             </button>
             <button className="btn" onClick={dismissCarry}>
-              ના
+              No
             </button>
           </div>
         </div>

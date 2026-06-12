@@ -43,7 +43,7 @@ export default function TodoList({ items = [], onChange }) {
   return (
     <section className="list-card">
       <div className="list-head-row">
-        <h3 className="list-title">📝 આજના કામ / To-Do</h3>
+        <h3 className="list-title">📝 To-Do</h3>
       </div>
 
       <ul className="checklist">
@@ -79,7 +79,7 @@ export default function TodoList({ items = [], onChange }) {
           type="text"
           className="todo-text"
           value={text}
-          placeholder="આજે શું કરવાનું છે? લખો…"
+          placeholder="What do you need to do today?"
           onChange={(e) => setText(e.target.value)}
         />
         <button className="btn small" type="submit">
