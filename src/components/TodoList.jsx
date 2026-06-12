@@ -62,7 +62,14 @@ export default function TodoList({ items = [], onChange }) {
         {items.length === 0 && <li className="checklist-empty">Nothing yet.</li>}
       </ul>
 
-      <form className="inline-add" onSubmit={add}>
+      <form className="inline-add todo-add" onSubmit={add}>
+        <input
+          type="text"
+          className="todo-text"
+          value={text}
+          placeholder="What do you need to do today?"
+          onChange={(e) => setText(e.target.value)}
+        />
         <select
           className="todo-cat-select"
           value={category}
@@ -75,14 +82,7 @@ export default function TodoList({ items = [], onChange }) {
             </option>
           ))}
         </select>
-        <input
-          type="text"
-          className="todo-text"
-          value={text}
-          placeholder="What do you need to do today?"
-          onChange={(e) => setText(e.target.value)}
-        />
-        <button className="btn small" type="submit">
+        <button className="btn" type="submit">
           Add
         </button>
       </form>

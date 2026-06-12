@@ -442,6 +442,19 @@ li.done .checklist-text {
 .inline-add {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Plain text/number inputs inside an add row grow to fill, but never force
+   the row to overflow on a narrow phone. */
+.inline-add > input[type='text'],
+.inline-add > input[type='number'] {
+  flex: 1 1 160px;
+  width: auto;
+  min-width: 0;
+}
+.inline-add > .rupee {
+  flex: 0 0 auto;
 }
 
 .year-input {
@@ -812,6 +825,22 @@ li.done .checklist-text {
   width: auto;
   flex-shrink: 0;
   padding: 8px 10px;
+}
+
+/* Add row: a full-width text box on top, then category + Add below.
+   Works the same on phone, tablet and desktop. */
+.todo-add {
+  flex-wrap: wrap;
+}
+.todo-add .todo-text {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.todo-add .todo-cat-select {
+  flex: 1 1 150px;
+}
+.todo-add .btn {
+  flex: 0 0 auto;
 }
 
 .todo-cat {
@@ -1723,5 +1752,33 @@ li.done .checklist-text {
   .content {
     padding: 18px;
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Tablets: keep comfortable two-column content. */
+@media (min-width: 821px) and (max-width: 1100px) {
+  .content {
+    padding: 24px;
+  }
+}
+
+/* Small phones: tighten spacing and headings so nothing overflows. */
+@media (max-width: 520px) {
+  .content {
+    padding: 14px;
+  }
+  .page-head h1 {
+    font-size: 20px;
+  }
+  .card {
+    padding: 14px;
+  }
+  .date-nav,
+  .toggle,
+  .list-head {
+    flex-wrap: wrap;
+  }
+  .exp-totals {
+    grid-template-columns: 1fr;
   }
 }
