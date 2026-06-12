@@ -47,6 +47,13 @@ jobs:
       - name: Point Gradle at the SDK
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
+      # Sign every build with the same committed debug keystore so new APKs
+      # install as an update over the old one and keep the user's data.
+      - name: Use the stable debug keystore
+        run: |
+          mkdir -p ~/.android
+          cp ci/debug.keystore ~/.android/debug.keystore
+
       - name: Build debug APK
         run: |
           cd android
