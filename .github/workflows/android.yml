@@ -3,19 +3,12 @@ name: Build Android APK
 # Builds an installable Android APK from the web app using Capacitor.
 # Runs on GitHub's runners (which have full internet + the Android SDK),
 # then uploads the .apk as an artifact and to a "apk-latest" release.
+#
+# Manual only: this builds *only* when triggered by hand (Actions tab →
+# "Run workflow"), so day-to-day code pushes don't rebuild the APK.
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/business-diary-5bQ3Y
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'index.html'
-      - 'capacitor.config.json'
-      - 'vite.config.js'
-      - '.github/workflows/android.yml'
 
 permissions:
   contents: write

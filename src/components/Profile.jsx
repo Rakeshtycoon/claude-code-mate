@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
+import PhotoCropper from './PhotoCropper.jsx'
 
 const FIELDS = [
   { key: 'name', label: 'Name' },
@@ -28,50 +29,24 @@ const EMPTY = {
   photo: '',
 }
 
-// Shrink the chosen image to a small square so it fits comfortably in
-// localStorage and loads instantly in the sidebar.
-function resizePhoto(file, size = 256) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const img = new Image()
-      img.onload = () => {
-        const side = Math.min(img.width, img.height)
-        const sx = (img.width - side) / 2
-        const sy = (img.height - side) / 2
-        const canvas = document.createElement('canvas')
-        canvas.width = size
-        canvas.height = size
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size)
-        resolve(canvas.toDataURL('image/jpeg', 0.85))
-      }
-      img.onerror = reject
-      img.src = reader.result
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 export default function Profile() {
   const [profile, setProfile] = useLocalStorage('bd.profile', EMPTY)
   const [saved, setSaved] = useState(false)
+  const [cropSrc, setCropSrc] = useState(null) // image awaiting crop/zoom
   const fileRef = useRef(null)
 
   function set(key, value) {
     setProfile({ ...profile, [key]: value })
   }
 
-  async function onPhoto(e) {
+  // Read the chosen file and open the crop/zoom dialog.
+  function onPhoto(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    try {
-      const dataUrl = await resizePhoto(file)
-      set('photo', dataUrl)
-    } catch {
-      alert('Could not read that image. Try another photo.')
-    }
+    const reader = new FileReader()
+    reader.onload = () => setCropSrc(String(reader.result))
+    reader.onerror = () => alert('Could not read that image. Try another photo.')
+    reader.readAsDataURL(file)
     e.target.value = ''
   }
 
@@ -85,6 +60,17 @@ export default function Profile() {
 
   return (
     <div>
+      {cropSrc && (
+        <PhotoCropper
+          src={cropSrc}
+          onCancel={() => setCropSrc(null)}
+          onSave={(dataUrl) => {
+            set('photo', dataUrl)
+            setCropSrc(null)
+          }}
+        />
+      )}
+
       <header className="page-head">
         <div>
           <h1>Company &amp; Personal Details</h1>
