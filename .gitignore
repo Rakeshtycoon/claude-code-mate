@@ -144,3 +144,7 @@ vite.config.ts.timestamp-*
 
 # Generated single-file test build (run `npm run build:single`)
 business-diary-test.html
+
+# Capacitor native project (generated in CI)
+android/
+ios/
