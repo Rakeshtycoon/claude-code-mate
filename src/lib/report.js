@@ -1,117 +1,131 @@
 import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import { isNativeApp } from './backup.js'
 
-const BLUE = [30, 58, 138]
-const GREY = [100, 116, 139]
-const INK = [15, 23, 42]
-
-function rs(v) {
+function rupee(v) {
   const n = Number(v) || 0
-  return 'Rs ' + n.toLocaleString('en-IN')
+  return '₹' + n.toLocaleString('en-IN')
 }
 
-/** Build a one-page A4 PDF of the day's report. Returns the jsPDF doc. */
-export function buildDailyReportPdf(r) {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const W = 210
-  const M = 14
-  let y = 18
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
 
-  const heading = (text) => {
-    y += 3
-    doc.setDrawColor(...BLUE)
-    doc.setLineWidth(0.4)
-    doc.line(M, y, W - M, y)
-    y += 6
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    doc.setTextColor(...BLUE)
-    doc.text(text, M, y)
-    y += 6
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(...INK)
-  }
-  const line = (text, x = M) => {
-    const parts = doc.splitTextToSize(text, W - M - x)
-    for (const p of parts) {
-      doc.text(p, x, y)
-      y += 5
-    }
-  }
+// Build the report as HTML so the browser renders any language (Gujarati,
+// English, ₹) correctly — then we snapshot it to an image for the PDF.
+function reportHtml(r) {
+  const row = (left, right, extra = '') =>
+    `<div class="row ${extra}"><span class="l">${left}</span>${
+      right != null ? `<span class="r">${right}</span>` : ''
+    }</div>`
 
-  // Title
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(17)
-  doc.setTextColor(...BLUE)
-  doc.text('Business Diary — Daily Report', M, y)
-  y += 6
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.setTextColor(...GREY)
-  doc.text(`${r.name ? r.name + '  ·  ' : ''}${r.dateLabel}`, M, y)
-  y += 2
+  const todos = r.todos.length
+    ? r.todos
+        .map((t) =>
+          row(
+            `${t.done ? '☑' : '☐'} ${esc(t.text)}`,
+            t.category ? `<span class="tag">${esc(t.category)}</span>` : null
+          )
+        )
+        .join('')
+    : '<div class="muted">No tasks.</div>'
 
-  // To-Do
-  heading("Today's To-Do")
-  if (r.todos.length === 0) line('No tasks.')
-  else
-    r.todos.forEach((t) =>
-      line(`${t.done ? '[x]' : '[ ]'} ${t.text}${t.category ? '  (' + t.category + ')' : ''}`)
-    )
+  const mantras = r.mantras
+    .map((m) => row(`${m.done ? '☑' : '☐'} ${esc(m.text)}`, null))
+    .join('')
 
-  // Mantras
-  heading('Morning Mantras')
-  const done = r.mantras.filter((m) => m.done)
-  doc.setTextColor(...GREY)
-  doc.text(`${done.length}/${r.mantras.length} done`, W - M, y - 6, { align: 'right' })
-  doc.setTextColor(...INK)
-  r.mantras.forEach((m) => line(`${m.done ? '[x]' : '[ ]'} ${m.text}`))
+  const expenses = r.expenses.length
+    ? r.expenses.map((e) => row(esc(e.note || 'Expense'), rupee(e.amount))).join('')
+    : '<div class="muted">No expenses.</div>'
 
-  // Targets
-  heading('Sales & Collection')
-  line(
-    `Month — Sales: ${rs(r.month.salesAchieved)} / ${rs(r.month.salesTarget)}    Collection: ${rs(
-      r.month.collAchieved
-    )} / ${rs(r.month.collTarget)}`
-  )
-  line(
-    `Today — Sales: ${rs(r.today.salesAchieved)} / ${rs(r.today.salesTarget)}    Collection: ${rs(
-      r.today.collAchieved
-    )} / ${rs(r.today.collTarget)}`
-  )
-  doc.setTextColor(...GREY)
-  doc.setFontSize(8)
-  doc.text('(Achieved / Target)', M, y)
-  y += 4
-  doc.setFontSize(10)
-  doc.setTextColor(...INK)
+  const doneCount = r.mantras.filter((m) => m.done).length
 
-  // Expenses
-  heading('Personal Expense')
-  if (r.expenses.length === 0) line('No expenses.')
-  else
-    r.expenses.forEach((e) => {
-      doc.text(e.note || 'Expense', M, y)
-      doc.text(rs(e.amount), W - M, y, { align: 'right' })
-      y += 5
+  return `
+  <style>
+    .rep * { box-sizing: border-box; margin: 0; }
+    .rep { width: 794px; padding: 34px 38px; background:#fff;
+           font-family: "Segoe UI", "Noto Sans Gujarati", system-ui, sans-serif; color:#0f172a; }
+    .rep h1 { font-size: 26px; color:#1e3a8a; }
+    .rep .sub { color:#64748b; font-size:14px; margin:4px 0 10px; }
+    .rep h2 { font-size:16px; color:#1e3a8a; margin-top:18px; padding-bottom:6px;
+              border-bottom:2px solid #1e3a8a; }
+    .rep .row { display:flex; justify-content:space-between; align-items:center;
+                gap:12px; padding:6px 2px; border-bottom:1px dashed #e2e8f0; font-size:15px; }
+    .rep .l { flex:1; }
+    .rep .r { font-weight:700; white-space:nowrap; }
+    .rep .tag { background:#dbeafe; color:#1e40af; font-size:11px; font-weight:700;
+                padding:2px 8px; border-radius:999px; }
+    .rep .muted { color:#94a3b8; font-style:italic; padding:6px 2px; font-size:14px; }
+    .rep .total .l, .rep .total .r { font-weight:800; color:#1e3a8a; }
+    .rep .hint { color:#94a3b8; font-size:12px; padding-top:4px; }
+    .rep .foot { margin-top:22px; color:#94a3b8; font-size:11px; text-align:center; }
+  </style>
+  <div class="rep">
+    <h1>Business Diary — Daily Report</h1>
+    <div class="sub">${esc(r.name ? r.name + ' · ' : '')}${esc(r.dateLabel)}</div>
+
+    <h2>Today's To-Do</h2>
+    ${todos}
+
+    <h2>Morning Mantras &nbsp;(${doneCount}/${r.mantras.length})</h2>
+    ${mantras}
+
+    <h2>Sales &amp; Collection</h2>
+    ${row('Month — Sales', `${rupee(r.month.salesAchieved)} / ${rupee(r.month.salesTarget)}`)}
+    ${row('Month — Collection', `${rupee(r.month.collAchieved)} / ${rupee(r.month.collTarget)}`)}
+    ${row('Today — Sales', `${rupee(r.today.salesAchieved)} / ${rupee(r.today.salesTarget)}`)}
+    ${row('Today — Collection', `${rupee(r.today.collAchieved)} / ${rupee(r.today.collTarget)}`)}
+    <div class="hint">(Achieved / Target)</div>
+
+    <h2>Personal Expense</h2>
+    ${expenses}
+    ${row('Total', rupee(r.expenseTotal), 'total')}
+
+    <div class="foot">Generated by Business Diary</div>
+  </div>`
+}
+
+async function renderCanvas(r) {
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'position:fixed;left:-99999px;top:0;width:794px;background:#ffffff;'
+  wrap.innerHTML = reportHtml(r)
+  document.body.appendChild(wrap)
+  try {
+    return await html2canvas(wrap.querySelector('.rep'), {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
     })
-  doc.setFont('helvetica', 'bold')
-  doc.text('Total', M, y)
-  doc.text(rs(r.expenseTotal), W - M, y, { align: 'right' })
-  doc.setFont('helvetica', 'normal')
+  } finally {
+    document.body.removeChild(wrap)
+  }
+}
 
-  // Footer
-  doc.setFontSize(8)
-  doc.setTextColor(...GREY)
-  doc.text('Generated by Business Diary', M, 290)
-
+/** Build the one-page PDF (as a jsPDF doc) from the rendered report image. */
+async function buildPdf(r) {
+  const canvas = await renderCanvas(r)
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pw = 210
+  const ph = 297
+  const margin = 8
+  let w = pw - margin * 2
+  let h = (canvas.height * w) / canvas.width
+  const maxH = ph - margin * 2
+  if (h > maxH) {
+    h = maxH
+    w = (canvas.width * h) / canvas.height
+  }
+  const x = (pw - w) / 2
+  doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, margin, w, h)
   return doc
 }
 
-/** Build the PDF and share it (native share sheet / Web Share / download). */
+/** Build the PDF and share it (native share sheet) or download it (web). */
 export async function shareDailyReport(r) {
-  const doc = buildDailyReportPdf(r)
+  const doc = await buildPdf(r)
   const fileName = `daily-report-${r.dateISO}.pdf`
 
   if (isNativeApp()) {
@@ -127,8 +141,7 @@ export async function shareDailyReport(r) {
     return { shared: true }
   }
 
-  // Browser (desktop/web): download the PDF. (Web Share with files is flaky
-  // on desktop; the native app path above uses the real share sheet.)
+  // Browser: download the PDF.
   const blob = doc.output('blob')
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
