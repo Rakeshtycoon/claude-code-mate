@@ -1167,6 +1167,18 @@ li.done .checklist-text {
   max-width: 130px;
 }
 
+/* ---------- Daily: share report ---------- */
+.share-report {
+  text-align: center;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.share-report .btn {
+  width: 100%;
+  max-width: 360px;
+}
+
 /* ---------- Rupee-prefixed money inputs ---------- */
 .rupee {
   position: relative;

@@ -2,6 +2,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { useSettings } from '../hooks/useSettings.js'
 import { todayISO, formatDate, formatMoney, uid } from '../lib/format.js'
 import { monthAchieved } from '../lib/totals.js'
+import { shareDailyReport } from '../lib/report.js'
 import { useMemo, useState } from 'react'
 import TodoList from './TodoList.jsx'
 
@@ -95,6 +96,8 @@ function TargetTable({ label, data, onChange, readOnly = false, hint }) {
 export default function Daily() {
   const [days, setDays] = useLocalStorage('bd.days', {})
   const [plans] = useLocalStorage('bd.monthlyPlans', {})
+  const [expenses] = useLocalStorage('bd.expenses', {})
+  const [profile] = useLocalStorage('bd.profile', {})
   const [settings] = useSettings()
   const MANTRAS = settings.mantras
   const [date, setDate] = useState(todayISO())
@@ -157,6 +160,45 @@ export default function Daily() {
     day: 'numeric',
   })
   const mantrasDone = MANTRAS.filter((m) => day.mantras[m]).length
+
+  async function shareReport() {
+    const dayExpenses = (expenses[date] || []).map((e) => ({ note: e.note, amount: e.amount }))
+    const reportData = {
+      name: profile.name || '',
+      dateISO: date,
+      dateLabel: new Date(date).toLocaleDateString(undefined, {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+      todos: (day.lists.todo || []).map((t) => ({
+        text: t.text,
+        done: !!t.done,
+        category: t.category || '',
+      })),
+      mantras: MANTRAS.map((m) => ({ text: m, done: !!day.mantras[m] })),
+      month: {
+        salesTarget: plans[ym]?.target?.sales || 0,
+        salesAchieved: monthAch.sales || 0,
+        collTarget: plans[ym]?.target?.collection || 0,
+        collAchieved: monthAch.collection || 0,
+      },
+      today: {
+        salesTarget: day.today.salesTarget || 0,
+        salesAchieved: day.today.salesAchieved || 0,
+        collTarget: day.today.collTarget || 0,
+        collAchieved: day.today.collAchieved || 0,
+      },
+      expenses: dayExpenses,
+      expenseTotal: dayExpenses.reduce((n, e) => n + (Number(e.amount) || 0), 0),
+    }
+    try {
+      await shareDailyReport(reportData)
+    } catch {
+      alert('Could not create the report. Please try again.')
+    }
+  }
 
   return (
     <div>
@@ -240,6 +282,15 @@ export default function Daily() {
             onChange={(today) => updateDay({ ...day, today })}
           />
         </div>
+      </div>
+
+      <div className="share-report">
+        <button className="btn primary" type="button" onClick={shareReport}>
+          📤 Share today's report (PDF)
+        </button>
+        <p className="muted small-note">
+          Makes a one-page PDF — To-Do, mantras, targets &amp; personal expense — to share.
+        </p>
       </div>
     </div>
   )
