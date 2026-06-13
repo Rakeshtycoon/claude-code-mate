@@ -94,22 +94,8 @@ export async function shareBackup() {
     return { shared: true }
   }
 
-  // Browser: Web Share API with a file, else download.
-  try {
-    const file = new File([text], fileName, { type: 'application/json' })
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: 'Business Diary backup',
-        text: 'My Business Diary backup',
-      })
-      return { shared: true }
-    }
-  } catch (err) {
-    if (err?.name === 'AbortError') return { shared: true } // user closed the sheet
-    // otherwise fall through to download
-  }
-
+  // Browser (desktop/web): download the file. The native app path above uses
+  // the real OS share sheet; Web Share with files is unreliable on desktop.
   downloadBackup()
   return { shared: false }
 }

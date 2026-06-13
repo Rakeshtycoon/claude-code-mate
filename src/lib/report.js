@@ -127,17 +127,9 @@ export async function shareDailyReport(r) {
     return { shared: true }
   }
 
+  // Browser (desktop/web): download the PDF. (Web Share with files is flaky
+  // on desktop; the native app path above uses the real share sheet.)
   const blob = doc.output('blob')
-  try {
-    const file = new File([blob], fileName, { type: 'application/pdf' })
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Daily Report', text: 'My daily report' })
-      return { shared: true }
-    }
-  } catch (err) {
-    if (err?.name === 'AbortError') return { shared: true }
-  }
-
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
