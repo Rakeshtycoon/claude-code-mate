@@ -1,15 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import {
-  Search,
-  ChevronRight,
-  Globe,
-  Hash,
-  FileText,
-  Copy,
-  Check,
-  Filter,
-  X
-} from 'lucide-react'
+import { Search, ChevronRight, Globe, Hash, FileText, Copy, Check, ListFilter as Filter, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ApiModule, ApiEndpoint } from '../types'
 

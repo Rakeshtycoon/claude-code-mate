@@ -1,20 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  Send,
-  Globe,
-  Key,
-  Clock,
-  AlertCircle,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  Trash2,
-  Play,
-  Loader2,
-  Copy,
-  Check
-} from 'lucide-react'
+import { Send, Globe, Key, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, ChevronDown, ChevronUp, Plus, Trash2, Play, Loader as Loader2, Copy, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ApiEndpoint, ApiEnvironment } from '../types'
 

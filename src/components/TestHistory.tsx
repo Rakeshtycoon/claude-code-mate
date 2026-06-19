@@ -1,13 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  Clock,
-  Trash2,
-  ChevronDown,
-  AlertCircle,
-  CheckCircle,
-  RefreshCw,
-  Loader2
-} from 'lucide-react'
+import { Clock, Trash2, ChevronDown, CircleAlert as AlertCircle, CircleCheck as CheckCircle, RefreshCw, Loader as Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ApiTestHistory } from '../types'
 

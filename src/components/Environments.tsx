@@ -1,14 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  Plus,
-  Globe,
-  Check,
-  X,
-  Pencil,
-  Trash2,
-  Loader2,
-  AlertCircle
-} from 'lucide-react'
+import { Plus, Globe, Check, X, Pencil, Trash2, Loader as Loader2, CircleAlert as AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { ApiEnvironment } from '../types'
 

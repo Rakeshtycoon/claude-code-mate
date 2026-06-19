@@ -1,18 +1,5 @@
 import { useState, useEffect, useRef, type DragEvent } from 'react'
-import {
-  Upload,
-  File,
-  Trash2,
-  Download,
-  AlertCircle,
-  Loader2,
-  FileText,
-  Image,
-  Music,
-  Video,
-  Archive,
-  Code
-} from 'lucide-react'
+import { Upload, File, Trash2, Download, CircleAlert as AlertCircle, Loader as Loader2, FileText, Image, Music, Video, Archive, Code } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { UploadedFile } from '../types'
 
